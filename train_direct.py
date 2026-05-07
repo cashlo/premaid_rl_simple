@@ -193,7 +193,7 @@ def main():
 
     # PPO Configuration
     cfg_ppo = PPO_DEFAULT_CONFIG.copy()
-    cfg_ppo["rollouts"] = 24
+    cfg_ppo["rollouts"] = 64
     cfg_ppo["learning_epochs"] = 5
     cfg_ppo["mini_batches"] = 4
     cfg_ppo["discount_factor"] = 0.99

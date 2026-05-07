@@ -39,6 +39,7 @@ class PremaidAIEnvCfg(DirectRLEnvCfg):
     # 1. Environment Settings
     env_name = "PremaidAI-Walk-v0"
     decimation = 2 
+    render_interval = 2
     episode_length_s = 10.0 
     
     # 2. RL Space Definition (Renamed in the new update)
