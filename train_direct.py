@@ -92,14 +92,16 @@ class PremaidAIEnv(DirectRLEnv):
         return {"policy": obs}
 
     def _get_rewards(self) -> torch.Tensor:
+        reward = torch.ones(self.num_envs, device=self.device) * 1.0
+
         # 1. The Main Goal: Move Forward (X-axis)
         forward_vel = self.robot.data.root_lin_vel_w[:, 0]
-        reward = forward_vel * 2.0 
+        reward += forward_vel * 2.0 
         
         # 2. Posture Penalty: Penalize leaning forward/backward or sideways
         # projected_gravity_b is [X, Y, Z]. If the robot is perfectly upright, X and Y are 0.
         pitch_roll_error = torch.sum(torch.square(self.robot.data.projected_gravity_b[:, :2]), dim=1)
-        reward -= pitch_roll_error * 5.0 # Heavy penalty for leaning!
+        reward -= pitch_roll_error * 1.0 
 
         # 3. Energy Penalty: Penalize moving the motors too fast (jittering)
         joint_velocities = torch.sum(torch.square(self.robot.data.joint_vel), dim=1)
@@ -109,13 +111,13 @@ class PremaidAIEnv(DirectRLEnv):
         # (You would need to store 'self.previous_actions' in _pre_physics_step to calculate this)
         
         # 5. The Death Penalty: Torso drops below 20cm
-        fallen = self.robot.data.root_pos_w[:, 2] < 0.2
+        fallen = self.robot.data.root_pos_w[:, 2] < 0.1
         reward[fallen] -= 10.0
         
         return reward
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
-        fallen = self.robot.data.root_pos_w[:, 2] < 0.2
+        fallen = self.robot.data.root_pos_w[:, 2] < 0.1
         time_out = self.episode_length_buf >= self.max_episode_length
         return fallen, time_out
 
@@ -208,7 +210,7 @@ def main():
     agent = PPO(models=models, memory=memory, cfg=cfg_ppo, observation_space=env.observation_space, action_space=env.action_space, device=env.device)
     
     # RESUME FROM CHECKPOINT (Uncomment this line if you crash and need to resume)
-    # agent.load("runs/premaid_ai/agent.pt")
+    # agent.load("runs/premaid_ai/26-05-09_11-32-21-406515_PPO/checkpoints/agent_73000.pt")
 
     # Start Training
     print("[INFO]: Launching skrl PPO Training...")
