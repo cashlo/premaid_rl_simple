@@ -1,4 +1,3 @@
-# train_direct.py
 import argparse
 import torch
 import torch.nn as nn
@@ -50,69 +49,63 @@ class PremaidAIEnv(DirectRLEnv):
         cfg.func("/World/Light", cfg)
 
     def _pre_physics_step(self, actions: torch.Tensor):
-        # Scale actions
-        scaled_actions = actions * 0.5 
+        # Increased action scale to give the robot full range of motion (±1.5 radians)
+        scaled_actions = actions * 1.5 
         
-        # ADD ACTION NOISE: Simulate backlash in the 3D printed gears
-        noisy_actions = scaled_actions + torch.randn_like(scaled_actions) * 0.02
-        
-        # CALCULATE TARGETS
-        self.joint_targets = self.default_joint_pos + noisy_actions
+        # NOISE REMOVED: Allow the policy to lock onto a deterministic gait first
+        self.joint_targets = self.default_joint_pos + scaled_actions
         
     def _apply_action(self):
-        # 1. Send commands to motors
         self.robot.set_joint_position_target(self.joint_targets)
         
-        # 2. THE RANDOM PUSH:
-        # Every ~500 steps, apply a random physical force to the robot's base
-        # to simulate tripping, uneven floors, or wind.
-        if self.episode_length_buf[0] % 500 == 0:
-            # Create a random push force between -50N and +50N on X and Y axes
-            push_forces = torch.zeros((self.num_envs, self.robot.num_bodies, 3), device=self.device)
-            push_forces[:, 0, 0:2] = (torch.rand(self.num_envs, 2, device=self.device) - 0.5) * 20.0
-            
-            push_torques = torch.zeros_like(push_forces)
-            
-            # Apply both to the root body
-            self.robot.set_external_force_and_torque(forces=push_forces, torques=push_torques)
+        # THE RANDOM PUSH: Disabled until the robot can walk steadily on its own
+        # if self.episode_length_buf[0] % 500 == 0:
+        #     push_forces = torch.zeros((self.num_envs, self.robot.num_bodies, 3), device=self.device)
+        #     push_forces[:, 0, 0:2] = (torch.rand(self.num_envs, 2, device=self.device) - 0.5) * 20.0
+        #     push_torques = torch.zeros_like(push_forces)
+        #     self.robot.set_external_force_and_torque(forces=push_forces, torques=push_torques)
 
     def _get_observations(self) -> dict:
-        # Get the perfect math data
+        # 1. Joint States
         joint_pos = self.robot.data.joint_pos
         joint_vel = self.robot.data.joint_vel
-        imu_data = self.robot.data.projected_gravity_b
         
-        # ADD NOISE: Simulate cheap sensors by adding random jitter
-        # +/- 0.01 radians for position, +/- 0.1 for velocity, +/- 0.05 for IMU
+        # 2. BNO055 IMU Simulation
+        bno055_accel = self.robot.data.projected_gravity_b 
+        bno055_gyro = self.robot.data.root_ang_vel_b
+        
+        # 3. Base Velocity (Required for RL forward movement)
+        base_lin_vel = self.robot.data.root_lin_vel_b
+
+        # NOISE REMOVED for Phase 1
         obs = torch.cat([
-            joint_pos + torch.randn_like(joint_pos) * 0.01,
-            joint_vel + torch.randn_like(joint_vel) * 0.1,
-            imu_data + torch.randn_like(imu_data) * 0.05, 
+            joint_pos,
+            joint_vel,
+            bno055_accel, 
+            bno055_gyro,
+            base_lin_vel
         ], dim=-1)
+        
         return {"policy": obs}
 
     def _get_rewards(self) -> torch.Tensor:
-        reward = torch.ones(self.num_envs, device=self.device) * 1.0
+        reward = torch.ones(self.num_envs, device=self.device) * .0
 
-        # 1. The Main Goal: Move Forward (X-axis)
+        # 1. Move Forward (X-axis)
         forward_vel = self.robot.data.root_lin_vel_w[:, 0]
         reward += forward_vel * 2.0 
         
-        # 2. Posture Penalty: Penalize leaning forward/backward or sideways
-        # projected_gravity_b is [X, Y, Z]. If the robot is perfectly upright, X and Y are 0.
+        # 2. Posture Penalty
         pitch_roll_error = torch.sum(torch.square(self.robot.data.projected_gravity_b[:, :2]), dim=1)
         reward -= pitch_roll_error * 1.0 
 
-        # 3. Energy Penalty: Penalize moving the motors too fast (jittering)
+        # 3. Energy Penalty
         joint_velocities = torch.sum(torch.square(self.robot.data.joint_vel), dim=1)
-        reward -= joint_velocities * 0.01 
+        reward -= joint_velocities * 0.001 
         
-        # 4. Action Rate Penalty: Penalize suddenly changing the motor direction
-        # (You would need to store 'self.previous_actions' in _pre_physics_step to calculate this)
-        
-        # 5. The Death Penalty: Torso drops below 20cm
+        # 4. The Death Penalty
         fallen = self.robot.data.root_pos_w[:, 2] < 0.1
-        reward[fallen] -= 10.0
+        reward[fallen] -= 50.0
         
         return reward
 
@@ -122,28 +115,21 @@ class PremaidAIEnv(DirectRLEnv):
         return fallen, time_out
 
     def _reset_idx(self, env_ids: torch.Tensor | None):
-        # 1. Let the base class reset the episode timers
         super()._reset_idx(env_ids)
         
-        # If env_ids is None, the simulator is asking to reset ALL robots
         if env_ids is None:
             env_ids = self.robot._ALL_INDICES
             
-        # 2. Pick the robot up and put it back in the air
         default_root_state = self.robot.data.default_root_state[env_ids].clone()
-        # Shift them so they spawn on their specific grid squares, not all in the center!
         default_root_state[:, :3] += self.scene.env_origins[env_ids] 
         
-        # Write the new position and kill any falling momentum (velocity)
         self.robot.write_root_pose_to_sim(default_root_state[:, :7], env_ids=env_ids)
         self.robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids=env_ids)
         
-        # 3. Snap the joints back to the default T-pose
         default_joint_pos = self.robot.data.default_joint_pos[env_ids].clone()
         default_joint_vel = self.robot.data.default_joint_vel[env_ids].clone()
         self.robot.write_joint_state_to_sim(default_joint_pos, default_joint_vel, env_ids=env_ids)
         
-        # 4. Reset our target tracking so it doesn't immediately try to resume its fallen pose
         self.joint_targets[env_ids] = default_joint_pos.clone()
         if hasattr(self, "previous_actions"):
             self.previous_actions[env_ids] = 0.0
@@ -182,20 +168,17 @@ class Value(DeterministicMixin, Model):
 # 3. Execution Main Loop
 # ==============================================================================
 def main():
-    # Initialize the Environment
     env_cfg = PremaidAIEnvCfg()
     env = PremaidAIEnv(cfg=env_cfg)
-    env = SkrlVecEnvWrapper(env) # Wrap for skrl
+    env = SkrlVecEnvWrapper(env) 
 
-    # Initialize Networks
     models = {
         "policy": Policy(env.observation_space, env.action_space, env.device),
         "value": Value(env.observation_space, env.action_space, env.device)
     }
 
-    # PPO Configuration
     cfg_ppo = PPO_DEFAULT_CONFIG.copy()
-    cfg_ppo["rollouts"] = 64
+    cfg_ppo["rollouts"] = 128  # Increased to give the agent longer continuous trajectories
     cfg_ppo["learning_epochs"] = 5
     cfg_ppo["mini_batches"] = 4
     cfg_ppo["discount_factor"] = 0.99
@@ -203,16 +186,15 @@ def main():
     cfg_ppo["learning_rate"] = 3e-4
     cfg_ppo["experiment"]["write_interval"] = 100
     cfg_ppo["experiment"]["directory"] = "runs/premaid_ai"
-    cfg_ppo["experiment"]["checkpoint_interval"] = 1000  # Save every 1,000 PPO updates
-    cfg_ppo["experiment"]["store_separately"] = False    # Overwrite the old save to save disk space
+    cfg_ppo["experiment"]["checkpoint_interval"] = 1000 
+    cfg_ppo["experiment"]["store_separately"] = False   
 
     memory = RandomMemory(memory_size=cfg_ppo["rollouts"], num_envs=env.num_envs, device=env.device)
     agent = PPO(models=models, memory=memory, cfg=cfg_ppo, observation_space=env.observation_space, action_space=env.action_space, device=env.device)
     
-    # RESUME FROM CHECKPOINT (Uncomment this line if you crash and need to resume)
-    agent.load("runs/premaid_ai/26-05-11_09-12-08-420933_PPO/checkpoints/agent_31000.pt")
+    # LOAD CHECKPOINT DISABLED
+    agent.load("runs/premaid_ai/26-05-11_14-28-01-753444_PPO/checkpoints/agent_28000.pt")
 
-    # Start Training
     print("[INFO]: Launching skrl PPO Training...")
     cfg_trainer = {"timesteps": 5000000, "headless": False}
     trainer = SequentialTrainer(cfg=cfg_trainer, env=env, agents=agent)

@@ -1,8 +1,6 @@
-# env_cfg.py
 import torch
 import isaaclab.sim as sim_utils
 
-# Import the new requirements
 from isaaclab.utils import configclass
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.envs import DirectRLEnvCfg
@@ -25,14 +23,10 @@ PREMAID_AI_CFG = ArticulationCfg(
     actuators={
         "kondo_servos": ImplicitActuatorCfg(
             joint_names_expr=[".*"], 
-
-            # The PD Gains
-            stiffness=2.5,  # Strong enough to hold weight, soft enough to absorb impact
-            damping=0.15,   # Just enough friction to stop jitters
-            
-            # Hardware Limits (Prevents physics explosions and AI cheating)
-            effort_limit=1.6,   # Caps the max torque to the real-world limit (N·m)
-            velocity_limit=8.0, # Caps the max joint speed (rad/s)  
+            stiffness=2.5,
+            damping=0.15,
+            effort_limit=1.6,
+            velocity_limit=8.0,
         ),
     },
 )
@@ -40,7 +34,7 @@ PREMAID_AI_CFG = ArticulationCfg(
 # ==============================================================================
 # Environment Configuration
 # ==============================================================================
-@configclass # <--- THIS DECORATOR IS MANDATORY NOW
+@configclass 
 class PremaidAIEnvCfg(DirectRLEnvCfg):
     # 1. Environment Settings
     env_name = "PremaidAI-Walk-v0"
@@ -48,9 +42,9 @@ class PremaidAIEnvCfg(DirectRLEnvCfg):
     render_interval = 2
     episode_length_s = 10.0 
     
-    # 2. RL Space Definition (Renamed in the new update)
+    # 2. RL Space Definition
     action_space = 25 
-    observation_space = 53 
+    observation_space = 59  # 25 (pos) + 25 (vel) + 3 (BNO055_accel) + 3 (BNO055_gyro) + 3 (lin_vel)
     state_space = 0
 
     sim: sim_utils.SimulationCfg = sim_utils.SimulationCfg(
@@ -60,18 +54,14 @@ class PremaidAIEnvCfg(DirectRLEnvCfg):
             gpu_max_rigid_patch_count=512 * 1024,
             gpu_max_rigid_contact_count=2048 * 1024,
             gpu_found_lost_pairs_capacity=512 * 1024,
-            # It's good practice to ensure these are enabled for GPU pipelines
-            # use_gpu=True,
-            # enable_pcm=True,
         )
     )
     
-    # 3. Scene Setup (num_envs and spacing moved here)
+    # 3. Scene Setup
     scene: InteractiveSceneCfg = InteractiveSceneCfg(
-        num_envs=8192, 
-        # num_envs=4096,
+        num_envs=4096,  # Halved from 8192 to balance the PPO batch size
         env_spacing=1.5
     )
     
-    # 4. Robot Definition (Must include the prim_path cloning logic)
+    # 4. Robot Definition
     robot: ArticulationCfg = PREMAID_AI_CFG.replace(prim_path="/World/envs/env_.*/Robot")
