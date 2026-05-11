@@ -21,6 +21,7 @@ from skrl.models.torch import Model, GaussianMixin, DeterministicMixin
 from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
 from skrl.trainers.torch import SequentialTrainer
 from skrl.memories.torch import RandomMemory
+from skrl.resources.schedulers.torch import KLAdaptiveRL
 from isaaclab_rl.skrl import SkrlVecEnvWrapper
 
 # ==============================================================================
@@ -184,6 +185,9 @@ def main():
     cfg_ppo["discount_factor"] = 0.99
     cfg_ppo["lambda"] = 0.95
     cfg_ppo["learning_rate"] = 3e-4
+    cfg_ppo["learning_rate_scheduler"] = KLAdaptiveRL
+    cfg_ppo["learning_rate_scheduler_kwargs"] = {"kl_threshold": 0.008}
+
     cfg_ppo["experiment"]["write_interval"] = 100
     cfg_ppo["experiment"]["directory"] = "runs/premaid_ai"
     cfg_ppo["experiment"]["checkpoint_interval"] = 1000 
@@ -193,7 +197,7 @@ def main():
     agent = PPO(models=models, memory=memory, cfg=cfg_ppo, observation_space=env.observation_space, action_space=env.action_space, device=env.device)
     
     # LOAD CHECKPOINT DISABLED
-    agent.load("runs/premaid_ai/26-05-11_14-28-01-753444_PPO/checkpoints/agent_28000.pt")
+    agent.load("runs/premaid_ai/26-05-11_15-16-15-320419_PPO/checkpoints/agent_44000.pt")
 
     print("[INFO]: Launching skrl PPO Training...")
     cfg_trainer = {"timesteps": 5000000, "headless": False}
