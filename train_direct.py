@@ -200,7 +200,7 @@ def main():
     cfg_ppo["mini_batches"] = 4
     cfg_ppo["discount_factor"] = 0.99
     cfg_ppo["lambda"] = 0.95
-    cfg_ppo["learning_rate"] = 1e-3
+    cfg_ppo["learning_rate"] = 3e-4
     cfg_ppo["experiment"]["write_interval"] = 100
     cfg_ppo["experiment"]["directory"] = "runs/premaid_ai"
     cfg_ppo["experiment"]["checkpoint_interval"] = 1000  # Save every 1,000 PPO updates
@@ -210,7 +210,7 @@ def main():
     agent = PPO(models=models, memory=memory, cfg=cfg_ppo, observation_space=env.observation_space, action_space=env.action_space, device=env.device)
     
     # RESUME FROM CHECKPOINT (Uncomment this line if you crash and need to resume)
-    # agent.load("runs/premaid_ai/26-05-09_11-32-21-406515_PPO/checkpoints/agent_73000.pt")
+    agent.load("runs/premaid_ai/26-05-11_09-12-08-420933_PPO/checkpoints/agent_31000.pt")
 
     # Start Training
     print("[INFO]: Launching skrl PPO Training...")

@@ -68,8 +68,8 @@ class PremaidAIEnvCfg(DirectRLEnvCfg):
     
     # 3. Scene Setup (num_envs and spacing moved here)
     scene: InteractiveSceneCfg = InteractiveSceneCfg(
-        # num_envs=8192, 
-        num_envs=8192,
+        num_envs=8192, 
+        # num_envs=4096,
         env_spacing=1.5
     )
     
