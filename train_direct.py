@@ -1,6 +1,8 @@
 import argparse
 import torch
 import torch.nn as nn
+import os
+import glob
 
 from isaaclab.app import AppLauncher
 
@@ -35,6 +37,9 @@ class PremaidAIEnv(DirectRLEnv):
         self.robot = self.scene["robot"]
         self.default_joint_pos = self.robot.data.default_joint_pos.clone()
         self.joint_targets = self.default_joint_pos.clone()
+        
+        # --- NEW: Initialize the Command Buffer (vx, vy, yaw) ---
+        self.commands = torch.zeros((self.num_envs, 3), device=self.device)
 
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot)
@@ -61,8 +66,17 @@ class PremaidAIEnv(DirectRLEnv):
         
         step_count = self.episode_length_buf[0]
 
-        # THE RANDOM PUSH: Disabled until the robot can walk steadily on its own
-        if step_count > 0 and torch.rand(1, device=self.device).item() < 0.01:
+        # --- NEW: Resample commands every 150 steps (5 seconds) ---
+        if step_count > 0 and step_count % 150 == 0:
+            # Forward speed: 0.0 to 1.0 m/s
+            self.commands[:, 0] = torch.rand(self.num_envs, device=self.device) * 1.0
+            # Strafing speed: -0.25 to 0.25 m/s
+            self.commands[:, 1] = (torch.rand(self.num_envs, device=self.device) - 0.5) * 1.0
+            # Turning speed: -0.5 to 0.5 rad/s
+            self.commands[:, 2] = (torch.rand(self.num_envs, device=self.device) - 0.5) * 2.0
+
+        # THE RANDOM PUSH: Kept for continuous robustness
+        if False and step_count > 0 and torch.rand(1, device=self.device).item() < 0.01:
             push_forces = torch.zeros((self.num_envs, self.robot.num_bodies, 3), device=self.device)
             push_forces[:, 0, 0:2] = (torch.rand(self.num_envs, 2, device=self.device) - 0.5) * 20.0
             push_torques = torch.zeros_like(push_forces)
@@ -77,43 +91,50 @@ class PremaidAIEnv(DirectRLEnv):
         bno055_accel = self.robot.data.projected_gravity_b 
         bno055_gyro = self.robot.data.root_ang_vel_b
         
-        # 3. Base Velocity (Required for RL forward movement)
+        # 3. Base Velocity 
         base_lin_vel = self.robot.data.root_lin_vel_b
 
-        # NOISE REMOVED for Phase 1
         obs = torch.cat([
             joint_pos + torch.randn_like(joint_pos) * 0.01,
             joint_vel + torch.randn_like(joint_vel) * 0.1,
-            bno055_accel + torch.randn_like(bno055_accel) * 0.02, # Accelerometer vibration
-            bno055_gyro + torch.randn_like(bno055_gyro) * 0.003,  # Gyroscope noise
-            base_lin_vel 
+            bno055_accel + torch.randn_like(bno055_accel) * 0.02,
+            bno055_gyro + torch.randn_like(bno055_gyro) * 0.003, 
+            base_lin_vel,
+            self.commands  # --- NEW: Added Joystick commands to the brain ---
         ], dim=-1)
         
         return {"policy": obs}
 
     def _get_rewards(self) -> torch.Tensor:
-        reward = torch.ones(self.num_envs, device=self.device) * 3.0
+        reward = torch.ones(self.num_envs, device=self.device) * 0.5
 
-        # 1. Move Forward (X-axis)
-        forward_vel = self.robot.data.root_lin_vel_w[:, 0]
-        reward += forward_vel * 2.0 
+        # --- NEW: 1. Tracking Rewards ---
+        # Calculate the mathematical difference between what we commanded and what the robot is actually doing
+        lin_vel_error_x = torch.square(self.commands[:, 0] - self.robot.data.root_lin_vel_b[:, 0])
+        lin_vel_error_y = torch.square(self.commands[:, 1] - self.robot.data.root_lin_vel_b[:, 1])
+        ang_vel_error_z = torch.square(self.commands[:, 2] - self.robot.data.root_ang_vel_b[:, 2])
+
+        # Torch.exp() makes the reward drop off quickly if the error gets large.
+        reward += torch.exp(-lin_vel_error_x / 1.0) * 2.0  # Highly weight forward tracking
+        reward += torch.exp(-lin_vel_error_y / 1.0) * 1.0  # Strafe tracking
+        reward += torch.exp(-ang_vel_error_z / 1.0) * 1.0  # Turn tracking
         
         # 2. Posture Penalty
         pitch_roll_error = torch.sum(torch.square(self.robot.data.projected_gravity_b[:, :2]), dim=1)
-        reward -= pitch_roll_error * 1.0 
+        reward -= pitch_roll_error * 5.0 
 
         # 3. Energy Penalty
         joint_velocities = torch.sum(torch.square(self.robot.data.joint_vel), dim=1)
         reward -= joint_velocities * 0.01 
         
         # 4. The Death Penalty
-        fallen = self.robot.data.root_pos_w[:, 2] < 0.1
+        fallen = self.robot.data.root_pos_w[:, 2] < 0.13
         reward[fallen] -= 50.0
         
         return reward
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
-        fallen = self.robot.data.root_pos_w[:, 2] < 0.1
+        fallen = self.robot.data.root_pos_w[:, 2] < 0.13
         time_out = self.episode_length_buf >= self.max_episode_length
         return fallen, time_out
 
@@ -136,6 +157,12 @@ class PremaidAIEnv(DirectRLEnv):
         self.joint_targets[env_ids] = default_joint_pos.clone()
         if hasattr(self, "previous_actions"):
             self.previous_actions[env_ids] = 0.0
+
+        # --- NEW: Assign brand new random commands when the robot resets ---
+        self.commands[env_ids, 0] = torch.rand(len(env_ids), device=self.device) * 1.0
+        self.commands[env_ids, 1] = (torch.rand(len(env_ids), device=self.device) - 0.5) * 1.0
+        self.commands[env_ids, 2] = (torch.rand(len(env_ids), device=self.device) - 0.5) * 2.0
+
 
 # ==============================================================================
 # 2. Define the Neural Networks
@@ -186,7 +213,7 @@ def main():
     cfg_ppo["mini_batches"] = 4
     cfg_ppo["discount_factor"] = 0.99
     cfg_ppo["lambda"] = 0.95
-    cfg_ppo["learning_rate"] = 1e-5
+    cfg_ppo["learning_rate"] = 5e-5  # --- UPDATED: The "7-Iron" for Network Surgery ---
     # cfg_ppo["learning_rate_scheduler"] = KLAdaptiveRL
     # cfg_ppo["learning_rate_scheduler_kwargs"] = {"kl_threshold": 0.008}
 
@@ -196,10 +223,55 @@ def main():
     cfg_ppo["experiment"]["store_separately"] = False   
 
     memory = RandomMemory(memory_size=cfg_ppo["rollouts"], num_envs=env.num_envs, device=env.device)
-    agent = PPO(models=models, memory=memory, cfg=cfg_ppo, observation_space=env.observation_space, action_space=env.action_space, device=env.device)
     
-    # LOAD CHECKPOINT DISABLED
-    agent.load("runs/premaid_ai/26-05-11_17-11-43-840991_PPO/checkpoints/agent_122000.pt")
+    model_upgrade = False
+    if model_upgrade:
+        # Load your exact Golden Checkpoint
+        checkpoint_path = "runs/premaid_ai/26-05-11_20-50-42-412142_PPO/checkpoints/agent_1000.pt"
+        print(f"[INFO] Performing Network Surgery on {checkpoint_path}...")
+        
+        # 1. Load the raw dictionary from the hard drive
+        checkpoint = torch.load(checkpoint_path, map_location=env.device)
+        
+        for model_name in ["policy", "value"]:
+            old_state_dict = checkpoint[model_name]
+            new_state_dict = models[model_name].state_dict()
+            
+            # 2. Grab the old weights from the very first layer
+            old_weight = old_state_dict['net.0.weight']
+            
+            # 3. Create a new empty matrix of the correct size [256, 62] full of zeros
+            new_weight = torch.zeros_like(new_state_dict['net.0.weight'])
+            
+            # 4. Copy the old muscle memory into the first 59 slots
+            new_weight[:, :old_weight.shape[1]] = old_weight
+            
+            # 5. Overwrite the state dict with our upgraded matrix
+            old_state_dict['net.0.weight'] = new_weight
+            
+            # 6. Load the hacked brain directly into the model
+            models[model_name].load_state_dict(old_state_dict, strict=False)
+
+        print("[INFO] Surgery complete! Brain successfully upgraded to 62 inputs.")
+        # =====================================================================
+
+        # Initialize the agent
+        agent = PPO(models=models, memory=memory, cfg=cfg_ppo, observation_space=env.observation_space, action_space=env.action_space, device=env.device)
+    else:
+        search_path = os.path.join("runs", "premaid_ai", "*", "checkpoints", "*.pt")
+        all_checkpoints = glob.glob(search_path)
+        
+        if not all_checkpoints:
+            raise FileNotFoundError("Could not find any checkpoints in runs/premaid_ai/")
+            
+        # Sort by file modification time to get the absolute newest file
+        latest_checkpoint = max(all_checkpoints, key=os.path.getmtime)
+        checkpoint_path = latest_checkpoint
+        
+        print(f"[INFO] Auto-loaded latest checkpoint: {checkpoint_path}")
+        
+        agent = PPO(models=models, memory=memory, cfg=cfg_ppo, observation_space=env.observation_space, action_space=env.action_space, device=env.device)
+        agent.load(checkpoint_path)
 
     print("[INFO]: Launching skrl PPO Training...")
     cfg_trainer = {"timesteps": 5000000, "headless": False}

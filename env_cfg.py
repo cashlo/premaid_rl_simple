@@ -44,7 +44,7 @@ class PremaidAIEnvCfg(DirectRLEnvCfg):
     
     # 2. RL Space Definition
     action_space = 25 
-    observation_space = 59  # 25 (pos) + 25 (vel) + 3 (BNO055_accel) + 3 (BNO055_gyro) + 3 (lin_vel)
+    observation_space = 62  # 25 (pos) + 25 (vel) + 3 (BNO055_accel) + 3 (BNO055_gyro) + 3 (lin_vel)
     state_space = 0
 
     sim: sim_utils.SimulationCfg = sim_utils.SimulationCfg(
