@@ -76,9 +76,9 @@ class PremaidAIEnv(DirectRLEnv):
             self.commands[:, 2] = (torch.rand(self.num_envs, device=self.device) - 0.5) * 2.0
 
         # THE RANDOM PUSH: Kept for continuous robustness
-        if False and step_count > 0 and torch.rand(1, device=self.device).item() < 0.01:
+        if step_count > 0 and torch.rand(1, device=self.device).item() < 0.01:
             push_forces = torch.zeros((self.num_envs, self.robot.num_bodies, 3), device=self.device)
-            push_forces[:, 0, 0:2] = (torch.rand(self.num_envs, 2, device=self.device) - 0.5) * 20.0
+            push_forces[:, 0, 0:2] = (torch.rand(self.num_envs, 2, device=self.device) - 0.5) * 8.0
             push_torques = torch.zeros_like(push_forces)
             self.robot.set_external_force_and_torque(forces=push_forces, torques=push_torques)
 
