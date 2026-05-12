@@ -1,28 +1,39 @@
 import argparse
+import os
+import glob
 import torch
 import torch.nn as nn
 
 from isaaclab.app import AppLauncher
 
-# Setup App Launcher
+# ==============================================================================
+# Setup App Launcher (Must be at the very top!)
+# ==============================================================================
 parser = argparse.ArgumentParser("Premaid AI RL Inference (Playback)")
+parser.add_argument("--num_envs", type=int, default=64, help="Number of robots to spawn.")
 AppLauncher.add_app_launcher_args(parser)
 args_cli = parser.parse_args()
 
 app_launcher = AppLauncher(args_cli)
 simulation_app = app_launcher.app
 
+# ==============================================================================
+# Isaac Lab Imports (Must be imported AFTER AppLauncher)
+# ==============================================================================
+# --- FIXED: The new Isaac Lab path for the keyboard ---
+from isaaclab.devices import Se2Keyboard, Se2KeyboardCfg
+
 from isaaclab.envs import DirectRLEnv
 from isaaclab.assets import Articulation
 from env_cfg import PremaidAIEnvCfg
 
-# skrl imports
+# SKRL imports
 from skrl.models.torch import Model, GaussianMixin, DeterministicMixin
 from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
 from isaaclab_rl.skrl import SkrlVecEnvWrapper
 
 # ==============================================================================
-# 1. The Phase 2 Environment (Identical to where the checkpoints were trained)
+# 1. The Phase 3 Environment 
 # ==============================================================================
 class PremaidAIEnv(DirectRLEnv):
     cfg: PremaidAIEnvCfg
@@ -32,6 +43,9 @@ class PremaidAIEnv(DirectRLEnv):
         self.robot = self.scene["robot"]
         self.default_joint_pos = self.robot.data.default_joint_pos.clone()
         self.joint_targets = self.default_joint_pos.clone()
+        
+        # Command Buffer
+        self.commands = torch.zeros((self.num_envs, 3), device=self.device)
 
     def _setup_scene(self):
         self.robot = Articulation(self.cfg.robot)
@@ -54,12 +68,13 @@ class PremaidAIEnv(DirectRLEnv):
         self.robot.set_joint_position_target(self.joint_targets)
         step_count = self.episode_length_buf[0]
         
-        # Kept the pushes enabled so you can watch them recover!
+        # The Ghost Pushes (4.0 Newtons for robustness)
         if step_count > 0 and torch.rand(1, device=self.device).item() < 0.01:
             push_forces = torch.zeros((self.num_envs, self.robot.num_bodies, 3), device=self.device)
-            push_forces[:, 0, 0:2] = (torch.rand(self.num_envs, 2, device=self.device) - 0.5) * 40.0
+            push_forces[:, 0, 0:2] = (torch.rand(self.num_envs, 2, device=self.device) - 0.5) * 4.0
             push_torques = torch.zeros_like(push_forces)
             self.robot.set_external_force_and_torque(forces=push_forces, torques=push_torques)
+
 
     def _get_observations(self) -> dict:
         joint_pos = self.robot.data.joint_pos
@@ -73,13 +88,13 @@ class PremaidAIEnv(DirectRLEnv):
             joint_vel + torch.randn_like(joint_vel) * 0.1,
             bno055_accel + torch.randn_like(bno055_accel) * 0.02,
             bno055_gyro + torch.randn_like(bno055_gyro) * 0.003, 
-            base_lin_vel 
+            base_lin_vel,
+            self.commands # Policy sees the joystick!
         ], dim=-1)
         
         return {"policy": obs}
 
     def _get_rewards(self) -> torch.Tensor:
-        # Rewards don't matter during playback, but the function must return a tensor
         return torch.zeros(self.num_envs, device=self.device)
 
     def _get_dones(self) -> tuple[torch.Tensor, torch.Tensor]:
@@ -99,6 +114,9 @@ class PremaidAIEnv(DirectRLEnv):
         default_joint_vel = self.robot.data.default_joint_vel[env_ids].clone()
         self.robot.write_joint_state_to_sim(default_joint_pos, default_joint_vel, env_ids=env_ids)
         self.joint_targets[env_ids] = default_joint_pos.clone()
+        
+        # Reset command buffer to 0 when falling
+        self.commands[env_ids] = 0.0 
 
 # ==============================================================================
 # 2. Neural Networks
@@ -130,44 +148,78 @@ class Value(DeterministicMixin, Model):
         return self.net(inputs["states"]), {}
 
 # ==============================================================================
-# 3. Playback Loop
+# 3. Playback & Teleop Loop
 # ==============================================================================
 def main():
     env_cfg = PremaidAIEnvCfg()
-    # env_cfg.scene.num_envs = 4
+    env_cfg.scene.num_envs = args_cli.num_envs
 
     env = PremaidAIEnv(cfg=env_cfg)
-    env = SkrlVecEnvWrapper(env) 
+    env_wrapped = SkrlVecEnvWrapper(env) 
 
     models = {
-        "policy": Policy(env.observation_space, env.action_space, env.device),
-        "value": Value(env.observation_space, env.action_space, env.device) 
+        "policy": Policy(env_wrapped.observation_space, env_wrapped.action_space, env_wrapped.device),
+        "value": Value(env_wrapped.observation_space, env_wrapped.action_space, env_wrapped.device) 
     }
 
     cfg_ppo = PPO_DEFAULT_CONFIG.copy()
-    agent = PPO(models=models, memory=None, cfg=cfg_ppo, observation_space=env.observation_space, action_space=env.action_space, device=env.device)
+    agent = PPO(models=models, memory=None, cfg=cfg_ppo, 
+                observation_space=env_wrapped.observation_space, 
+                action_space=env_wrapped.action_space, 
+                device=env_wrapped.device)
 
     # ==========================================================================
-    # PASTE YOUR CHECKPOINT PATH HERE TO TEST IT
+    # AUTO-FIND LATEST CHECKPOINT
     # ==========================================================================
-    CHECKPOINT_PATH = "runs/premaid_ai/26-05-12_14-30-56-504792_PPO/checkpoints/agent_13000.pt"
+    search_path = os.path.join("runs", "premaid_ai", "*", "checkpoints", "*.pt")
+    all_checkpoints = glob.glob(search_path)
     
-    print(f"[INFO] Loading Phase 2 Checkpoint: {CHECKPOINT_PATH}")
-    agent.load(CHECKPOINT_PATH)
+    if not all_checkpoints:
+        raise FileNotFoundError("Could not find any checkpoints in runs/premaid_ai/")
+        
+    latest_checkpoint = max(all_checkpoints, key=os.path.getmtime)
+    latest_checkpoint = "runs/premaid_ai/26-05-12_23-27-53-411878_PPO/checkpoints/agent_100000.pt"
+    print(f"\n[INFO] Auto-Loading Latest Checkpoint: {latest_checkpoint}")
     
-    # THIS IS THE MAGIC LINE: Tells the brain to stop learning and exploring
+    agent.load(latest_checkpoint)
     agent.set_mode("eval")
 
-    print("[INFO] Spawning robots. Press Ctrl+C to stop.")
-    obs, _ = env.reset()
+    # ==========================================================================
+    # INITIALIZE KEYBOARD TELEOP
+    # ==========================================================================
     
-    # Infinite visual loop
+    teleop_interface = Se2Keyboard(Se2KeyboardCfg())
+    
+    print("\n" + "="*50)
+    print("🎮 CONTROLS ACTIVE!")
+    print("Click the Omniverse Viewport to take control.")
+    print("W / S : Walk Forward / Backward")
+    print("A / D : Strafe Left / Right")
+    print("Q / E : Turn Left / Right")
+    print("="*50 + "\n")
+
+    obs, _ = env_wrapped.reset()
+    
     while simulation_app.is_running():
+        
+        # 1. Read Keyboard Input
+        teleop_cmd = teleop_interface.advance()
+
+        if teleop_cmd[0] != 0 or teleop_cmd[1] != 0 or teleop_cmd[2] != 0:
+            print(f"🎮 Joystick Command: {teleop_cmd}")
+
+        cmd_tensor = torch.tensor(teleop_cmd, device=env_wrapped.device, dtype=torch.float32)
+        
+        # 2. Overwrite the command buffer for ALL robots
+        env_wrapped.unwrapped.commands[:, 0] = cmd_tensor[0]
+        env_wrapped.unwrapped.commands[:, 1] = cmd_tensor[1]
+        env_wrapped.unwrapped.commands[:, 2] = cmd_tensor[2]
+
+        # 3. Standard Step
         with torch.no_grad():
-            # Get exact deterministic actions
             actions, _, _ = agent.act(obs, timestep=0, timesteps=0)
             
-        obs, reward, terminated, truncated, info = env.step(actions)
+        obs, reward, terminated, truncated, info = env_wrapped.step(actions)
 
     simulation_app.close()
 

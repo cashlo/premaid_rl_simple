@@ -78,7 +78,7 @@ class PremaidAIEnv(DirectRLEnv):
         # THE RANDOM PUSH: Kept for continuous robustness
         if step_count > 0 and torch.rand(1, device=self.device).item() < 0.01:
             push_forces = torch.zeros((self.num_envs, self.robot.num_bodies, 3), device=self.device)
-            push_forces[:, 0, 0:2] = (torch.rand(self.num_envs, 2, device=self.device) - 0.5) * 8.0
+            push_forces[:, 0, 0:2] = (torch.rand(self.num_envs, 2, device=self.device) - 0.5) * 4.0
             push_torques = torch.zeros_like(push_forces)
             self.robot.set_external_force_and_torque(forces=push_forces, torques=push_torques)
 
@@ -106,7 +106,7 @@ class PremaidAIEnv(DirectRLEnv):
         return {"policy": obs}
 
     def _get_rewards(self) -> torch.Tensor:
-        reward = torch.ones(self.num_envs, device=self.device) * 0.5
+        reward = torch.ones(self.num_envs, device=self.device) * 0.2
 
         # --- NEW: 1. Tracking Rewards ---
         # Calculate the mathematical difference between what we commanded and what the robot is actually doing
@@ -224,7 +224,7 @@ def main():
 
     memory = RandomMemory(memory_size=cfg_ppo["rollouts"], num_envs=env.num_envs, device=env.device)
     
-    model_upgrade = False
+    model_upgrade = True
     if model_upgrade:
         # Load your exact Golden Checkpoint
         checkpoint_path = "runs/premaid_ai/26-05-11_20-50-42-412142_PPO/checkpoints/agent_1000.pt"
@@ -248,6 +248,9 @@ def main():
             
             # 5. Overwrite the state dict with our upgraded matrix
             old_state_dict['net.0.weight'] = new_weight
+
+            if model_name == "policy":
+                old_state_dict['log_std_parameter'] = torch.zeros_like(new_state_dict['log_std_parameter'])
             
             # 6. Load the hacked brain directly into the model
             models[model_name].load_state_dict(old_state_dict, strict=False)
