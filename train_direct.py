@@ -53,18 +53,20 @@ class PremaidAIEnv(DirectRLEnv):
         # Increased action scale to give the robot full range of motion (±1.5 radians)
         scaled_actions = actions * 1.5 
         
-        # NOISE REMOVED: Allow the policy to lock onto a deterministic gait first
-        self.joint_targets = self.default_joint_pos + scaled_actions
+        noisy_actions = scaled_actions + torch.randn_like(scaled_actions) * 0.02
+        self.joint_targets = self.default_joint_pos + noisy_actions
         
     def _apply_action(self):
         self.robot.set_joint_position_target(self.joint_targets)
         
+        step_count = self.episode_length_buf[0]
+
         # THE RANDOM PUSH: Disabled until the robot can walk steadily on its own
-        # if self.episode_length_buf[0] % 500 == 0:
-        #     push_forces = torch.zeros((self.num_envs, self.robot.num_bodies, 3), device=self.device)
-        #     push_forces[:, 0, 0:2] = (torch.rand(self.num_envs, 2, device=self.device) - 0.5) * 20.0
-        #     push_torques = torch.zeros_like(push_forces)
-        #     self.robot.set_external_force_and_torque(forces=push_forces, torques=push_torques)
+        if step_count > 0 and torch.rand(1, device=self.device).item() < 0.01:
+            push_forces = torch.zeros((self.num_envs, self.robot.num_bodies, 3), device=self.device)
+            push_forces[:, 0, 0:2] = (torch.rand(self.num_envs, 2, device=self.device) - 0.5) * 20.0
+            push_torques = torch.zeros_like(push_forces)
+            self.robot.set_external_force_and_torque(forces=push_forces, torques=push_torques)
 
     def _get_observations(self) -> dict:
         # 1. Joint States
@@ -80,17 +82,17 @@ class PremaidAIEnv(DirectRLEnv):
 
         # NOISE REMOVED for Phase 1
         obs = torch.cat([
-            joint_pos,
-            joint_vel,
-            bno055_accel, 
-            bno055_gyro,
-            base_lin_vel
+            joint_pos + torch.randn_like(joint_pos) * 0.01,
+            joint_vel + torch.randn_like(joint_vel) * 0.1,
+            bno055_accel + torch.randn_like(bno055_accel) * 0.02, # Accelerometer vibration
+            bno055_gyro + torch.randn_like(bno055_gyro) * 0.003,  # Gyroscope noise
+            base_lin_vel 
         ], dim=-1)
         
         return {"policy": obs}
 
     def _get_rewards(self) -> torch.Tensor:
-        reward = torch.ones(self.num_envs, device=self.device) * .0
+        reward = torch.ones(self.num_envs, device=self.device) * 3.0
 
         # 1. Move Forward (X-axis)
         forward_vel = self.robot.data.root_lin_vel_w[:, 0]
@@ -102,7 +104,7 @@ class PremaidAIEnv(DirectRLEnv):
 
         # 3. Energy Penalty
         joint_velocities = torch.sum(torch.square(self.robot.data.joint_vel), dim=1)
-        reward -= joint_velocities * 0.001 
+        reward -= joint_velocities * 0.01 
         
         # 4. The Death Penalty
         fallen = self.robot.data.root_pos_w[:, 2] < 0.1
@@ -184,9 +186,9 @@ def main():
     cfg_ppo["mini_batches"] = 4
     cfg_ppo["discount_factor"] = 0.99
     cfg_ppo["lambda"] = 0.95
-    cfg_ppo["learning_rate"] = 3e-4
-    cfg_ppo["learning_rate_scheduler"] = KLAdaptiveRL
-    cfg_ppo["learning_rate_scheduler_kwargs"] = {"kl_threshold": 0.008}
+    cfg_ppo["learning_rate"] = 1e-5
+    # cfg_ppo["learning_rate_scheduler"] = KLAdaptiveRL
+    # cfg_ppo["learning_rate_scheduler_kwargs"] = {"kl_threshold": 0.008}
 
     cfg_ppo["experiment"]["write_interval"] = 100
     cfg_ppo["experiment"]["directory"] = "runs/premaid_ai"
@@ -197,7 +199,7 @@ def main():
     agent = PPO(models=models, memory=memory, cfg=cfg_ppo, observation_space=env.observation_space, action_space=env.action_space, device=env.device)
     
     # LOAD CHECKPOINT DISABLED
-    agent.load("runs/premaid_ai/26-05-11_15-16-15-320419_PPO/checkpoints/agent_44000.pt")
+    agent.load("runs/premaid_ai/26-05-11_17-11-43-840991_PPO/checkpoints/agent_122000.pt")
 
     print("[INFO]: Launching skrl PPO Training...")
     cfg_trainer = {"timesteps": 5000000, "headless": False}
