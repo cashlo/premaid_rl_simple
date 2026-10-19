@@ -23,6 +23,10 @@ pip install mujoco skrl torch gymnasium imageio imageio-ffmpeg
 
 ## Train
 
+**Windows one-click:** double-click `mujoco_sim\run_training_windows.bat`. It pulls this folder from the
+`mujoco-walking` branch, creates a `premaid_mujoco` conda env on first run (CUDA torch, mujoco, skrl),
+and trains with (cores - 2) worker processes, resuming the newest checkpoint if one exists.
+
 ```bash
 cd mujoco_sim
 python train_mujoco.py                              # 256 robots on (cores-1) processes
