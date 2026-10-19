@@ -3,12 +3,13 @@ REM One-click setup + training for the MuJoCo walking task on Windows.
 REM  1. pulls mujoco_sim/ from the mujoco-walking branch into this checkout (working tree only)
 REM  2. creates a conda env "premaid_mujoco" the first time
 REM  3. trains, resuming from the newest checkpoint if there is one
+REM Extra arguments are passed to train_mujoco.py (later ones win), e.g. --viewer --num_envs 64
 setlocal
 cd /d "%~dp0\.."
 
 echo === [1/3] Fetching mujoco_sim from origin/mujoco-walking ===
 git fetch origin mujoco-walking || goto :fail
-git restore --source origin/mujoco-walking --worktree -- mujoco_sim ":(exclude)mujoco_sim/run_training_windows.bat" || goto :fail
+git restore --source origin/mujoco-walking --worktree -- mujoco_sim ":(exclude)mujoco_sim/*.bat" || goto :fail
 
 echo === [2/3] Python environment ===
 call "%USERPROFILE%\miniconda3\Scripts\activate.bat" || goto :fail
@@ -32,7 +33,7 @@ set RESUME=
 if exist runs\premaid_mujoco\*  for /r runs\premaid_mujoco %%f in (*.pt) do set RESUME=--resume latest
 echo %NENVS% robots on %WORKERS% worker processes %RESUME%
 echo TensorBoard: open another prompt, activate premaid_mujoco, run  tensorboard --logdir "%CD%\runs"
-python train_mujoco.py --num_envs %NENVS% --workers %WORKERS% --timesteps 200000 %RESUME%
+python train_mujoco.py --num_envs %NENVS% --workers %WORKERS% --timesteps 200000 %RESUME% %*
 echo.
 echo Training finished. Watch it with:  python play_mujoco.py
 pause

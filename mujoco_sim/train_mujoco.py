@@ -121,13 +121,15 @@ def main():
     ap.add_argument("--resume", default=None, help="checkpoint path or 'latest'")
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--no_randomize", action="store_true", help="disable domain randomization/pushes")
+    ap.add_argument("--viewer", action="store_true", help="open a live MuJoCo window showing robot #0 while training")
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
     cfg = WalkCfg(randomize=not args.no_randomize)
-    vec = SubprocVecPremaid(args.num_envs, args.workers, seed=args.seed, cfg=cfg)
+    vec = SubprocVecPremaid(args.num_envs, args.workers, seed=args.seed, cfg=cfg, viewer=args.viewer)
     env = SkrlPremaidWrapper(vec, device=args.device)
-    print(f"[INFO] {env.num_envs} robots on {len(vec.procs)} CPU workers, learner on {args.device}")
+    gpu = f" ({torch.cuda.get_device_name(0)})" if str(args.device).startswith("cuda") else ""
+    print(f"[INFO] {env.num_envs} robots on {len(vec.procs)} CPU workers, learner on {args.device}{gpu}")
 
     agent = make_agent(env, args.device, args.rollouts)
     if args.resume:

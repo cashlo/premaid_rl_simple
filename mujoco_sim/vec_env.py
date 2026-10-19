@@ -20,10 +20,23 @@ from skrl.envs.wrappers.torch.base import Wrapper
 from premaid_env import NUM_ACTIONS, NUM_OBS, NUM_STATES, PremaidWalkEnv, WalkCfg
 
 
-def _worker(remote, parent_remote, n, seed, cfg):
+def _open_viewer(env):
+    """Live window on this worker's first robot (training keeps running at full speed)."""
+    import mujoco
+    import mujoco.viewer
+
+    v = mujoco.viewer.launch_passive(env.model, env.data, show_left_ui=False, show_right_ui=False)
+    v.cam.type = mujoco.mjtCamera.mjCAMERA_TRACKING
+    v.cam.trackbodyid = env.base_id
+    v.cam.distance, v.cam.elevation, v.cam.azimuth = 1.0, -15.0, 120.0
+    return v
+
+
+def _worker(remote, parent_remote, n, seed, cfg, viewer=False):
     parent_remote.close()
     os.environ.setdefault("OMP_NUM_THREADS", "1")
     envs = [PremaidWalkEnv(cfg, seed=seed + i) for i in range(n)]
+    view = _open_viewer(envs[0]) if viewer else None
     obs = np.zeros((n, NUM_OBS), np.float32)
     st = np.zeros((n, NUM_STATES), np.float32)
     try:
@@ -44,15 +57,21 @@ def _worker(remote, parent_remote, n, seed, cfg):
                         summaries.append(e.episode_summary())
                         o, s = e.reset()
                     obs[i], st[i] = o, s
+                if view is not None and view.is_running():
+                    view.sync()
                 remote.send((obs.copy(), st.copy(), rew, term, trunc, summaries))
             elif cmd == "close":
                 break
     finally:
+        if view is not None:
+            view.close()
         remote.close()
 
 
 class SubprocVecPremaid:
-    def __init__(self, num_envs: int, num_workers: int | None = None, seed: int = 0, cfg: WalkCfg | None = None):
+    def __init__(
+        self, num_envs: int, num_workers: int | None = None, seed: int = 0, cfg: WalkCfg | None = None, viewer: bool = False
+    ):
         cfg = cfg or WalkCfg()
         num_workers = num_workers or max(1, (os.cpu_count() or 2) - 1)
         num_workers = min(num_workers, num_envs)
@@ -63,7 +82,7 @@ class SubprocVecPremaid:
         self.remotes, self.procs = [], []
         for w, n in enumerate(counts):
             parent, child = ctx.Pipe()
-            p = ctx.Process(target=_worker, args=(child, parent, n, seed + 10_000 * w, cfg), daemon=True)
+            p = ctx.Process(target=_worker, args=(child, parent, n, seed + 10_000 * w, cfg, viewer and w == 0), daemon=True)
             p.start()
             child.close()
             self.remotes.append(parent)
