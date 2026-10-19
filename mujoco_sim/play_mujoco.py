@@ -73,6 +73,7 @@ def main():
     ap.add_argument("--seconds", type=float, default=10.0)
     ap.add_argument("--export", default=None, help="save a TorchScript policy and exit")
     ap.add_argument("--randomize", action="store_true", help="keep domain randomization + pushes on")
+    ap.add_argument("--debris", type=float, default=0.0, help="floor debris level 0 (flat) .. 1 (hardest)")
     args = ap.parse_args()
 
     path = find_checkpoint(args.checkpoint)
@@ -85,7 +86,10 @@ def main():
         print("       joint target = default_pose + action * scale (0.30 legs / 0.20 arms+head), servo-ID order")
         return
 
-    env = PremaidWalkEnv(WalkCfg(randomize=args.randomize, obs_noise=args.randomize), seed=0)
+    env = PremaidWalkEnv(
+        WalkCfg(randomize=args.randomize, obs_noise=args.randomize, debris_level_init=args.debris, debris_level_step=0.0),
+        seed=0,
+    )
     env.manual_commands = True
     env.commands[:] = args.cmd
     obs, _ = env.reset()

@@ -87,6 +87,13 @@ class WalkCfg:
     push_vel: float = 0.25  # m/s horizontal velocity kick
     obs_noise: bool = True
 
+    # floor debris + curriculum (level 0 = flat floor, 1 = hardest)
+    debris: bool = True
+    debris_max_height: float = 0.010  # protrusion at level 1 (m); swing target is 2.5 cm
+    debris_ring: tuple = (0.15, 0.55)  # placed this far from the torso (m), never under the feet
+    debris_level_init: float = 0.0
+    debris_level_step: float = 0.05  # +step after a full-length episode, -step after a fall
+
     # rewards (each is multiplied by control_dt, like legged_gym / Isaac Lab)
     w_track_lin: float = 2.0
     w_track_ang: float = 1.0
@@ -142,6 +149,11 @@ class PremaidWalkEnv:
         self.foot_site_ids = np.array([m.site("l_foot_site").id, m.site("r_foot_site").id])
         self.foot_geoms_body = {m.geom_bodyid[g] for g in self.sole_ids}
         self._sid = {n: m.sensor(n).adr[0] for n in ("gyro", "local_linvel")}
+        self.debris_ids = np.array([i for i in range(m.ngeom) if (m.geom(i).name or "").startswith("debris")], dtype=int)
+        self.ground_ids = set([self.floor_id, *self.debris_ids.tolist()])
+        self.debris_mocap = m.body_mocapid[m.geom_bodyid[self.debris_ids]]
+        self.debris_half_h = m.geom_size[self.debris_ids, 2].copy()
+        self.debris_level = self.cfg.debris_level_init
 
         # nominal model params for randomization
         self._nom_friction = m.geom_friction[:, 0].copy()
@@ -214,15 +226,53 @@ class PremaidWalkEnv:
         if d.ncon:
             g = d.contact.geom[: d.ncon]
             for g1, g2 in g:
-                if g1 == self.floor_id or g2 == self.floor_id:
-                    other = g2 if g1 == self.floor_id else g1
+                g1_ground, g2_ground = g1 in self.ground_ids, g2 in self.ground_ids
+                if g1_ground != g2_ground:
+                    ground, other = (g1, g2) if g1_ground else (g2, g1)
                     if other == self.sole_ids[0]:
                         contact[0] = True
                     elif other == self.sole_ids[1]:
                         contact[1] = True
-                    else:
-                        bad = True
+                    elif ground == self.floor_id:
+                        bad = True  # torso/arm/shin on the floor = fallen (bumping debris is allowed)
         return contact, bad
+
+    # ------------------------------------------------------------------ debris
+    def _place_debris(self, idx, center_xy):
+        """Drop debris pieces `idx` on a ring around center_xy, sticking up by a random amount."""
+        c, d, r = self.cfg, self.data, self.rng
+        n = len(idx)
+        if n == 0:
+            return
+        mid = self.debris_mocap[idx]
+        if not c.debris or self.debris_level <= 0.0:
+            d.mocap_pos[mid] = [0.0, 0.0, -1.0]
+            return
+        ang = r.uniform(0, 2 * np.pi, n)
+        rad = r.uniform(*c.debris_ring, n)
+        prot = r.uniform(0.2, 1.0, n) * c.debris_max_height * self.debris_level
+        d.mocap_pos[mid, 0] = center_xy[0] + rad * np.cos(ang)
+        d.mocap_pos[mid, 1] = center_xy[1] + rad * np.sin(ang)
+        d.mocap_pos[mid, 2] = prot - self.debris_half_h[idx]
+        yaw = r.uniform(0, np.pi, n)
+        d.mocap_quat[mid] = np.stack([np.cos(yaw / 2), np.zeros(n), np.zeros(n), np.sin(yaw / 2)], 1)
+
+    def _recycle_debris(self):
+        """Debris the robot has walked away from is moved back around it."""
+        if not self.cfg.debris or self.debris_level <= 0.0 or len(self.debris_ids) == 0:
+            return
+        base = self.data.qpos[:2]
+        dist = np.linalg.norm(self.data.mocap_pos[self.debris_mocap, :2] - base, axis=1)
+        far = np.nonzero(dist > self.cfg.debris_ring[1] + 0.1)[0]
+        if len(far):
+            self._place_debris(far, base)
+
+    def _update_curriculum(self, terminated_early: bool):
+        c = self.cfg
+        if not c.debris:
+            return
+        delta = -c.debris_level_step if terminated_early else c.debris_level_step
+        self.debris_level = float(np.clip(self.debris_level + delta, 0.0, 1.0))
 
     # ------------------------------------------------------------------ API
     def reset(self):
@@ -231,6 +281,7 @@ class PremaidWalkEnv:
         if not hasattr(self, "friction"):
             self.friction = float(self.model.geom_friction[self.floor_id, 0])
         self._place_default(r.uniform(-np.pi, np.pi))
+        self._place_debris(np.arange(len(self.debris_ids)), (0.0, 0.0))
         d = self.data
         d.qpos[self.qadr] += r.normal(0, 0.03, size=NUM_ACTIONS)
         d.qvel[:6] += r.normal(0, 0.05, size=6)
@@ -292,6 +343,7 @@ class PremaidWalkEnv:
             self.push_flag = 1.0
 
         torque_sq = 0.0
+        self._recycle_debris()
         for _ in range(self.decimation):
             mujoco.mj_step(m, d)
             torque_sq += float(np.sum(np.square(d.actuator_force)))
@@ -303,6 +355,8 @@ class PremaidWalkEnv:
 
         rew, terms, terminated = self._reward(action, torque_sq)
         truncated = self.step_count >= self.max_steps
+        if terminated or truncated:
+            self._update_curriculum(terminated_early=terminated)
         for k, v in terms.items():
             self.ep_sums[k] = self.ep_sums.get(k, 0.0) + v
 
@@ -364,4 +418,5 @@ class PremaidWalkEnv:
         T = max(self.step_count * self.dt, 1e-6)
         out = {f"Episode_Reward/{k}": v / T * (1.0 if k != "termination" else T) for k, v in self.ep_sums.items()}
         out["Episode/length_s"] = self.step_count * self.dt
+        out["Curriculum/debris_level"] = self.debris_level
         return out

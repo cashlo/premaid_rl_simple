@@ -33,6 +33,8 @@ D2R = math.pi / 180.0
 I_SCALE = 1e-7
 
 # Servo torque limits from the URDF (N*m): legs use the stronger servo.
+N_DEBRIS = 16
+
 LEG_EFFORT = 1.3712
 ARM_EFFORT = 0.9114
 
@@ -218,6 +220,16 @@ def build(bounds, kp_leg, kp_arm, kv):
             f'forcerange="{-eff:.4f} {eff:.4f}"/>'
         )
 
+    # Floor debris: mocap (kinematic) boxes, parked under the floor. premaid_env.py moves them around the
+    # robot and sets how far each one sticks up (curriculum). Footprints vary; all are 2 cm thick
+    # so any protrusion up to 2 cm can be had by sinking them.
+    rng = np.random.default_rng(0)
+    debris = "\n".join(
+        f'    <body name="debris{i}" mocap="true" pos="0 0 -1"><geom name="debris{i}" type="box" size="{sx:.4f} {sy:.4f} 0.0100" '
+        f'rgba="0.55 0.42 0.3 1" contype="1" conaffinity="1" friction="0.8 0.02 0.002" condim="3"/></body>'
+        for i, (sx, sy) in enumerate(rng.uniform([0.004, 0.004], [0.03, 0.06], size=(N_DEBRIS, 2)))
+    )
+
     meshes = "\n".join(f'    <mesh name="{m}" file="{m}.stl"/>' for m in sorted(bounds))
     excludes = "\n".join(
         f'    <exclude body1="{p}_{a}" body2="{p}_{c}"/>'
@@ -265,6 +277,7 @@ def build(bounds, kp_leg, kp_arm, kv):
   <worldbody>
     <light pos="0 0 3" dir="0 0 -1" directional="true"/>
     <geom name="floor" type="plane" size="0 0 0.05" material="grid" contype="1" conaffinity="1" friction="0.9 0.02 0.002" condim="3"/>
+{debris}
 {base}
   </worldbody>
 
@@ -304,7 +317,7 @@ def main():
     import mujoco
 
     m = mujoco.MjModel.from_xml_path(out)
-    print(f"wrote {out}: nbody={m.nbody} njnt={m.njnt} nu={m.nu} mass={m.body_subtreemass[1]:.3f} kg")
+    print(f"wrote {out}: nbody={m.nbody} njnt={m.njnt} nu={m.nu} robot mass={m.body_subtreemass[m.body("base_link").id]:.3f} kg")
 
 
 if __name__ == "__main__":

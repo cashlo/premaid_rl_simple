@@ -94,7 +94,20 @@ python tools/build_mjcf.py --description /tmp/premaidai_description
 | Actor obs | joints, IMU, **base linear velocity**, command | joints, IMU, command, last action, gait clock (no base velocity — the real robot can't measure it) |
 | Critic | same as actor | privileged: + base velocity, height, foot contacts, friction |
 | Rewards | tracking, posture, energy, fall | + gait-phase foot contacts, swing height, slip, action rate, hip/arm pose, joint limits |
-| Randomization | pushes, action/obs noise | friction, torso mass, servo gains, damping, velocity pushes, obs noise |
+| Randomization | pushes, action/obs noise | friction, torso mass, servo gains, damping, velocity pushes (0.25 m/s every 3–6 s), obs noise |
+| Terrain | flat | flat → floor debris curriculum (see below) |
 
 Command speeds are scaled to the robot: it is 0.38 m tall, so 1 m/s would be
 several body lengths per second. Widen `cmd_vx` in `WalkCfg` once it walks.
+
+## Floor debris curriculum
+
+16 small boards (8–60 mm footprints) are scattered 0.15–0.55 m around each robot and re-placed
+around it as it walks away. How far they stick up is set per robot by a level from 0 to 1:
+0 is a flat floor, 1 means pieces up to 10 mm tall. A robot moves up 0.05 after
+a full 20 s episode and down 0.05 after a fall, so the debris only appears once it walks well.
+Stepping on debris counts as foot contact; touching it with a shin is allowed; only the body on the
+floor itself counts as a fall. TensorBoard: `Curriculum/debris_level`.
+
+Tune in `WalkCfg` (`debris_max_height`, `debris_ring`, `debris_level_step`), or turn off with
+`debris=False`. Watch it with `python play_mujoco.py --debris 1`.

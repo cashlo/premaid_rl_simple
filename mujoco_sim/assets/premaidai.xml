@@ -64,6 +64,22 @@
   <worldbody>
     <light pos="0 0 3" dir="0 0 -1" directional="true"/>
     <geom name="floor" type="plane" size="0 0 0.05" material="grid" contype="1" conaffinity="1" friction="0.9 0.02 0.002" condim="3"/>
+    <body name="debris0" mocap="true" pos="0 0 -1"><geom name="debris0" type="box" size="0.0206 0.0191 0.0100" rgba="0.55 0.42 0.3 1" contype="1" conaffinity="1" friction="0.8 0.02 0.002" condim="3"/></body>
+    <body name="debris1" mocap="true" pos="0 0 -1"><geom name="debris1" type="box" size="0.0051 0.0049 0.0100" rgba="0.55 0.42 0.3 1" contype="1" conaffinity="1" friction="0.8 0.02 0.002" condim="3"/></body>
+    <body name="debris2" mocap="true" pos="0 0 -1"><geom name="debris2" type="box" size="0.0251 0.0551 0.0100" rgba="0.55 0.42 0.3 1" contype="1" conaffinity="1" friction="0.8 0.02 0.002" condim="3"/></body>
+    <body name="debris3" mocap="true" pos="0 0 -1"><geom name="debris3" type="box" size="0.0198 0.0449 0.0100" rgba="0.55 0.42 0.3 1" contype="1" conaffinity="1" friction="0.8 0.02 0.002" condim="3"/></body>
+    <body name="debris4" mocap="true" pos="0 0 -1"><geom name="debris4" type="box" size="0.0181 0.0564 0.0100" rgba="0.55 0.42 0.3 1" contype="1" conaffinity="1" friction="0.8 0.02 0.002" condim="3"/></body>
+    <body name="debris5" mocap="true" pos="0 0 -1"><geom name="debris5" type="box" size="0.0252 0.0042 0.0100" rgba="0.55 0.42 0.3 1" contype="1" conaffinity="1" friction="0.8 0.02 0.002" condim="3"/></body>
+    <body name="debris6" mocap="true" pos="0 0 -1"><geom name="debris6" type="box" size="0.0263 0.0059 0.0100" rgba="0.55 0.42 0.3 1" contype="1" conaffinity="1" friction="0.8 0.02 0.002" condim="3"/></body>
+    <body name="debris7" mocap="true" pos="0 0 -1"><geom name="debris7" type="box" size="0.0230 0.0138 0.0100" rgba="0.55 0.42 0.3 1" contype="1" conaffinity="1" friction="0.8 0.02 0.002" condim="3"/></body>
+    <body name="debris8" mocap="true" pos="0 0 -1"><geom name="debris8" type="box" size="0.0264 0.0343 0.0100" rgba="0.55 0.42 0.3 1" contype="1" conaffinity="1" friction="0.8 0.02 0.002" condim="3"/></body>
+    <body name="debris9" mocap="true" pos="0 0 -1"><geom name="debris9" type="box" size="0.0118 0.0277 0.0100" rgba="0.55 0.42 0.3 1" contype="1" conaffinity="1" friction="0.8 0.02 0.002" condim="3"/></body>
+    <body name="debris10" mocap="true" pos="0 0 -1"><geom name="debris10" type="box" size="0.0047 0.0110 0.0100" rgba="0.55 0.42 0.3 1" contype="1" conaffinity="1" friction="0.8 0.02 0.002" condim="3"/></body>
+    <body name="debris11" mocap="true" pos="0 0 -1"><geom name="debris11" type="box" size="0.0214 0.0402 0.0100" rgba="0.55 0.42 0.3 1" contype="1" conaffinity="1" friction="0.8 0.02 0.002" condim="3"/></body>
+    <body name="debris12" mocap="true" pos="0 0 -1"><geom name="debris12" type="box" size="0.0200 0.0255 0.0100" rgba="0.55 0.42 0.3 1" contype="1" conaffinity="1" friction="0.8 0.02 0.002" condim="3"/></body>
+    <body name="debris13" mocap="true" pos="0 0 -1"><geom name="debris13" type="box" size="0.0299 0.0589 0.0100" rgba="0.55 0.42 0.3 1" contype="1" conaffinity="1" friction="0.8 0.02 0.002" condim="3"/></body>
+    <body name="debris14" mocap="true" pos="0 0 -1"><geom name="debris14" type="box" size="0.0218 0.0404 0.0100" rgba="0.55 0.42 0.3 1" contype="1" conaffinity="1" friction="0.8 0.02 0.002" condim="3"/></body>
+    <body name="debris15" mocap="true" pos="0 0 -1"><geom name="debris15" type="box" size="0.0219 0.0258 0.0100" rgba="0.55 0.42 0.3 1" contype="1" conaffinity="1" friction="0.8 0.02 0.002" condim="3"/></body>
     <body name="base_link" pos="0 0 0.26" childclass="premaid">
       <freejoint name="root"/>
       <inertial pos="0.008509 2e-06 0.070698" mass="0.4426" fullinertia="0.000287114 0.000267208 0.000118833 -1.151e-10 2.37094e-05 -3.379e-10"/>
