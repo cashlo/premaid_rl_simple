@@ -1,0 +1,141 @@
+#usda 1.0
+(
+    defaultPrim = "premaidai"
+    doc = "Premaid AI with corrected link inertias. The URDF writes inertia values with an 'e-5' suffix but they are really in units of 1e-7 kg*m^2, so premaidai.usd has every inertia 100x too large. This layer references premaidai.usd and divides each body's diagonal inertia by 100."
+)
+
+def Xform "premaidai" (
+    prepend references = @./premaidai.usd@
+)
+{
+    over "base_link"
+    {
+        custom float3 physics:diagonalInertia = (0.00029039098, 0.00026720788, 0.00011555654)
+    }
+
+    over "neck_pitch"
+    {
+        custom float3 physics:diagonalInertia = (6.49173e-7, 2.296302e-7, 6.195854e-7)
+    }
+
+    over "head_yaw"
+    {
+        custom float3 physics:diagonalInertia = (0.000001263611, 0.0000023689224, 0.000001737291)
+    }
+
+    over "head"
+    {
+        custom float3 physics:diagonalInertia = (0.00006777039, 0.000059841364, 0.000056073648)
+    }
+
+    over "l_hip_joint"
+    {
+        custom float3 physics:diagonalInertia = (0.0000020138887, 0.0000053792937, 0.0000046092046)
+    }
+
+    over "l_uleg_root"
+    {
+        custom float3 physics:diagonalInertia = (0.000024600387, 0.000019111909, 0.0000239258)
+    }
+
+    over "l_uleg"
+    {
+        custom float3 physics:diagonalInertia = (0.00008843909, 0.000082549, 0.000022280177)
+    }
+
+    over "l_lleg"
+    {
+        custom float3 physics:diagonalInertia = (0.000074046926, 0.000043465072, 0.000047566584)
+    }
+
+    over "l_ankle"
+    {
+        custom float3 physics:diagonalInertia = (0.000017278213, 0.00002574256, 0.000022701013)
+    }
+
+    over "l_foot"
+    {
+        custom float3 physics:diagonalInertia = (0.00003830268, 0.000101361984, 0.00012066023)
+    }
+
+    over "l_uarm_joint"
+    {
+        custom float3 physics:diagonalInertia = (0.0000039090332, 0.000011546376, 0.0000133218045)
+    }
+
+    over "l_uarm"
+    {
+        custom float3 physics:diagonalInertia = (0.00003566205, 0.000012680938, 0.0000414081)
+    }
+
+    over "l_larm_joint"
+    {
+        custom float3 physics:diagonalInertia = (9.642602e-7, 0.000025027728, 0.00002357086)
+    }
+
+    over "l_larm"
+    {
+        custom float3 physics:diagonalInertia = (0.000034236124, 0.000014158714, 0.00004141171)
+    }
+
+    over "l_hand"
+    {
+        custom float3 physics:diagonalInertia = (8.159201e-7, 2.4993912e-7, 9.728969e-7)
+    }
+
+    over "r_hip_joint"
+    {
+        custom float3 physics:diagonalInertia = (0.0000020138887, 0.0000053792937, 0.0000046092046)
+    }
+
+    over "r_uleg_root"
+    {
+        custom float3 physics:diagonalInertia = (0.000024600387, 0.000019111909, 0.0000239258)
+    }
+
+    over "r_uleg"
+    {
+        custom float3 physics:diagonalInertia = (0.00008843909, 0.000082549, 0.000022280177)
+    }
+
+    over "r_lleg"
+    {
+        custom float3 physics:diagonalInertia = (0.000074046926, 0.000043465072, 0.000047566584)
+    }
+
+    over "r_ankle"
+    {
+        custom float3 physics:diagonalInertia = (0.000017278213, 0.00002574256, 0.000022701013)
+    }
+
+    over "r_foot"
+    {
+        custom float3 physics:diagonalInertia = (0.00003830268, 0.000101361984, 0.00012066023)
+    }
+
+    over "r_uarm_joint"
+    {
+        custom float3 physics:diagonalInertia = (0.0000039090332, 0.000011546376, 0.0000133218045)
+    }
+
+    over "r_uarm"
+    {
+        custom float3 physics:diagonalInertia = (0.00003566205, 0.000012680938, 0.0000414081)
+    }
+
+    over "r_larm_joint"
+    {
+        custom float3 physics:diagonalInertia = (9.642602e-7, 0.000025027728, 0.00002357086)
+    }
+
+    over "r_larm"
+    {
+        custom float3 physics:diagonalInertia = (0.000034236124, 0.000014158714, 0.00004141171)
+    }
+
+    over "r_hand"
+    {
+        custom float3 physics:diagonalInertia = (8.159201e-7, 2.4993912e-7, 9.728969e-7)
+    }
+}
+
