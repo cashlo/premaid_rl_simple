@@ -237,31 +237,31 @@
   </contact>
 
   <actuator>
-    <position name="r_shy" joint="r_shy_joint" kp="3.0" kv="0.08" ctrlrange="-1.88496 2.23838" forcerange="-0.9114 0.9114"/>
-    <position name="head_ny" joint="head_ny_joint" kp="3.0" kv="0.08" ctrlrange="-0.17671 0.41233" forcerange="-0.9114 0.9114"/>
-    <position name="l_shy" joint="l_shy_joint" kp="3.0" kv="0.08" ctrlrange="-1.88496 2.23838" forcerange="-0.9114 0.9114"/>
-    <position name="head_nz" joint="head_nz_joint" kp="3.0" kv="0.08" ctrlrange="-0.82467 0.82467" forcerange="-0.9114 0.9114"/>
-    <position name="r_hpz" joint="r_hpz_joint" kp="6.0" kv="0.08" ctrlrange="-1.41372 1.78774" forcerange="-1.3712 1.3712"/>
-    <position name="head_nx" joint="head_nx_joint" kp="3.0" kv="0.08" ctrlrange="-0.38288 0.50069" forcerange="-0.9114 0.9114"/>
-    <position name="l_hpz" joint="l_hpz_joint" kp="6.0" kv="0.08" ctrlrange="-1.41372 1.78774" forcerange="-1.3712 1.3712"/>
-    <position name="r_shx" joint="r_shx_joint" kp="3.0" kv="0.08" ctrlrange="-0.05301 1.59809" forcerange="-0.9114 0.9114"/>
-    <position name="r_hpx" joint="r_hpx_joint" kp="6.0" kv="0.08" ctrlrange="-0.44244 0.39642" forcerange="-1.3712 1.3712"/>
-    <position name="l_shx" joint="l_shx_joint" kp="3.0" kv="0.08" ctrlrange="-1.59809 0.05301" forcerange="-0.9114 0.9114"/>
-    <position name="l_hpx" joint="l_hpx_joint" kp="6.0" kv="0.08" ctrlrange="-0.39642 0.44244" forcerange="-1.3712 1.3712"/>
-    <position name="r_ely" joint="r_ely_joint" kp="3.0" kv="0.08" ctrlrange="-2.24604 2.34441" forcerange="-0.9114 0.9114"/>
-    <position name="r_hpy" joint="r_hpy_joint" kp="6.0" kv="0.08" ctrlrange="-1.59872 1.57451" forcerange="-1.3712 1.3712"/>
-    <position name="l_ely" joint="l_ely_joint" kp="3.0" kv="0.08" ctrlrange="-2.24604 2.34441" forcerange="-0.9114 0.9114"/>
-    <position name="l_hpy" joint="l_hpy_joint" kp="6.0" kv="0.08" ctrlrange="-1.59872 1.57451" forcerange="-1.3712 1.3712"/>
-    <position name="r_elx" joint="r_elx_joint" kp="3.0" kv="0.08" ctrlrange="-0.23562 2.07640" forcerange="-0.9114 0.9114"/>
-    <position name="r_kny" joint="r_kny_joint" kp="6.0" kv="0.08" ctrlrange="-0.03652 2.08811" forcerange="-1.3712 1.3712"/>
-    <position name="l_elx" joint="l_elx_joint" kp="3.0" kv="0.08" ctrlrange="-2.07640 0.23562" forcerange="-0.9114 0.9114"/>
-    <position name="l_kny" joint="l_kny_joint" kp="6.0" kv="0.08" ctrlrange="-0.03652 2.08811" forcerange="-1.3712 1.3712"/>
-    <position name="r_wry" joint="r_wry_joint" kp="3.0" kv="0.08" ctrlrange="-2.35619 2.06167" forcerange="-0.9114 0.9114"/>
-    <position name="r_aky" joint="r_aky_joint" kp="6.0" kv="0.08" ctrlrange="-1.07089 0.42412" forcerange="-1.3712 1.3712"/>
-    <position name="l_wry" joint="l_wry_joint" kp="3.0" kv="0.08" ctrlrange="-2.35619 2.06167" forcerange="-0.9114 0.9114"/>
-    <position name="l_aky" joint="l_aky_joint" kp="6.0" kv="0.08" ctrlrange="-1.07089 0.42412" forcerange="-1.3712 1.3712"/>
-    <position name="r_akx" joint="r_akx_joint" kp="6.0" kv="0.08" ctrlrange="-0.66739 0.65090" forcerange="-1.3712 1.3712"/>
-    <position name="l_akx" joint="l_akx_joint" kp="6.0" kv="0.08" ctrlrange="-0.65090 0.66739" forcerange="-1.3712 1.3712"/>
+    <position name="r_shy" joint="r_shy_joint" kp="43.6" kv="0.3" ctrlrange="-1.88496 2.23838" forcerange="-0.9114 0.9114"/>
+    <position name="head_ny" joint="head_ny_joint" kp="43.6" kv="0.3" ctrlrange="-0.17671 0.41233" forcerange="-0.9114 0.9114"/>
+    <position name="l_shy" joint="l_shy_joint" kp="43.6" kv="0.3" ctrlrange="-1.88496 2.23838" forcerange="-0.9114 0.9114"/>
+    <position name="head_nz" joint="head_nz_joint" kp="43.6" kv="0.3" ctrlrange="-0.82467 0.82467" forcerange="-0.9114 0.9114"/>
+    <position name="r_hpz" joint="r_hpz_joint" kp="43.6" kv="0.3" ctrlrange="-1.41372 1.78774" forcerange="-1.3712 1.3712"/>
+    <position name="head_nx" joint="head_nx_joint" kp="43.6" kv="0.3" ctrlrange="-0.38288 0.50069" forcerange="-0.9114 0.9114"/>
+    <position name="l_hpz" joint="l_hpz_joint" kp="43.6" kv="0.3" ctrlrange="-1.41372 1.78774" forcerange="-1.3712 1.3712"/>
+    <position name="r_shx" joint="r_shx_joint" kp="43.6" kv="0.3" ctrlrange="-0.05301 1.59809" forcerange="-0.9114 0.9114"/>
+    <position name="r_hpx" joint="r_hpx_joint" kp="43.6" kv="0.3" ctrlrange="-0.44244 0.39642" forcerange="-1.3712 1.3712"/>
+    <position name="l_shx" joint="l_shx_joint" kp="43.6" kv="0.3" ctrlrange="-1.59809 0.05301" forcerange="-0.9114 0.9114"/>
+    <position name="l_hpx" joint="l_hpx_joint" kp="43.6" kv="0.3" ctrlrange="-0.39642 0.44244" forcerange="-1.3712 1.3712"/>
+    <position name="r_ely" joint="r_ely_joint" kp="43.6" kv="0.3" ctrlrange="-2.24604 2.34441" forcerange="-0.9114 0.9114"/>
+    <position name="r_hpy" joint="r_hpy_joint" kp="43.6" kv="0.3" ctrlrange="-1.59872 1.57451" forcerange="-1.3712 1.3712"/>
+    <position name="l_ely" joint="l_ely_joint" kp="43.6" kv="0.3" ctrlrange="-2.24604 2.34441" forcerange="-0.9114 0.9114"/>
+    <position name="l_hpy" joint="l_hpy_joint" kp="43.6" kv="0.3" ctrlrange="-1.59872 1.57451" forcerange="-1.3712 1.3712"/>
+    <position name="r_elx" joint="r_elx_joint" kp="43.6" kv="0.3" ctrlrange="-0.23562 2.07640" forcerange="-0.9114 0.9114"/>
+    <position name="r_kny" joint="r_kny_joint" kp="43.6" kv="0.3" ctrlrange="-0.03652 2.08811" forcerange="-1.3712 1.3712"/>
+    <position name="l_elx" joint="l_elx_joint" kp="43.6" kv="0.3" ctrlrange="-2.07640 0.23562" forcerange="-0.9114 0.9114"/>
+    <position name="l_kny" joint="l_kny_joint" kp="43.6" kv="0.3" ctrlrange="-0.03652 2.08811" forcerange="-1.3712 1.3712"/>
+    <position name="r_wry" joint="r_wry_joint" kp="43.6" kv="0.3" ctrlrange="-2.35619 2.06167" forcerange="-0.9114 0.9114"/>
+    <position name="r_aky" joint="r_aky_joint" kp="43.6" kv="0.3" ctrlrange="-1.07089 0.42412" forcerange="-1.3712 1.3712"/>
+    <position name="l_wry" joint="l_wry_joint" kp="43.6" kv="0.3" ctrlrange="-2.35619 2.06167" forcerange="-0.9114 0.9114"/>
+    <position name="l_aky" joint="l_aky_joint" kp="43.6" kv="0.3" ctrlrange="-1.07089 0.42412" forcerange="-1.3712 1.3712"/>
+    <position name="r_akx" joint="r_akx_joint" kp="43.6" kv="0.3" ctrlrange="-0.66739 0.65090" forcerange="-1.3712 1.3712"/>
+    <position name="l_akx" joint="l_akx_joint" kp="43.6" kv="0.3" ctrlrange="-0.65090 0.66739" forcerange="-1.3712 1.3712"/>
   </actuator>
 
   <sensor>

@@ -20,6 +20,7 @@ Critic state (96) = actor observation without noise + privileged terms:
 
 from __future__ import annotations
 
+import collections
 import dataclasses
 import os
 
@@ -83,6 +84,15 @@ class WalkCfg:
     body_mass_scale: tuple = (0.9, 1.15)
     kp_scale: tuple = (0.8, 1.2)
     damping_scale: tuple = (0.7, 1.4)
+
+    # servo model fitted to the RCB-4 step responses (tools/fit_servo.py): stiff PD (kp/kv in the
+    # MJCF) whose reference slews toward the command at <= servo_vmax, plus delays measured in
+    # 5 ms physics substeps. The RCB-4 refreshes position reads every ~20 ms.
+    servo_vmax: float = 3.9  # rad/s (~220 deg/s)
+    servo_vmax_scale: tuple = (0.8, 1.2)
+    cmd_delay_steps: tuple = (0, 4)  # command -> servo, 0-20 ms
+    obs_delay_steps: tuple = (0, 4)  # joint readings this many substeps stale, 0-20 ms
+    servo_offset: float = 0.02  # rad; each servo settles up to ~1 deg off its target
     push_interval_s: tuple = (3.0, 6.0)
     push_vel: float = 0.25  # m/s horizontal velocity kick
     obs_noise: bool = True
@@ -199,6 +209,25 @@ class PremaidWalkEnv:
         m.dof_damping[:] = self._nom_damping * r.uniform(*c.damping_scale)
         self.friction = mu
 
+    def _reset_servos(self):
+        """Per-episode servo parameters + buffers for the delayed, slew-limited servo model."""
+        c, r = self.cfg, self.rng
+        if c.randomize:
+            self.vmax = c.servo_vmax * r.uniform(*c.servo_vmax_scale)
+            self.cmd_delay = int(r.integers(c.cmd_delay_steps[0], c.cmd_delay_steps[1] + 1))
+            self.obs_delay = int(r.integers(c.obs_delay_steps[0], c.obs_delay_steps[1] + 1))
+            self.servo_bias = r.uniform(-c.servo_offset, c.servo_offset, size=NUM_ACTIONS)
+        else:  # nominal: middle of the ranges
+            self.vmax = c.servo_vmax
+            self.cmd_delay = (c.cmd_delay_steps[0] + c.cmd_delay_steps[1]) // 2
+            self.obs_delay = (c.obs_delay_steps[0] + c.obs_delay_steps[1]) // 2
+            self.servo_bias = np.zeros(NUM_ACTIONS)
+        d = self.data
+        self.servo_ref = d.qpos[self.qadr].copy()
+        self.cmd_buf = collections.deque([self.default_q.copy()] * self.cmd_delay, maxlen=self.cmd_delay + 1)
+        snap = (d.qpos[self.qadr].copy(), d.qvel[self.vadr].copy())
+        self.joint_hist = collections.deque([snap] * (c.obs_delay_steps[1] + 1), maxlen=c.obs_delay_steps[1] + 1)
+
     def _sample_commands(self):
         c, r = self.cfg, self.rng
         if r.random() < c.cmd_stand_prob:
@@ -287,6 +316,7 @@ class PremaidWalkEnv:
         d.qvel[:6] += r.normal(0, 0.05, size=6)
         mujoco.mj_forward(self.model, d)
         d.ctrl[:] = self.default_q
+        self._reset_servos()
 
         self.step_count = 0
         self.last_action = np.zeros(NUM_ACTIONS)
@@ -306,8 +336,9 @@ class PremaidWalkEnv:
         grav = R.T @ np.array([0.0, 0.0, -1.0])
         gyro = d.sensordata[self._sid["gyro"]: self._sid["gyro"] + 3].copy()
         linvel = d.sensordata[self._sid["local_linvel"]: self._sid["local_linvel"] + 3].copy()
-        q = d.qpos[self.qadr] - self.default_q
-        dq = d.qvel[self.vadr].copy()
+        q_read, dq_read = self.joint_hist[-1 - self.obs_delay]  # RCB-4 reads are a bit stale
+        q = q_read - self.default_q
+        dq = dq_read.copy()
         clock, _ = self._gait_clock()
         cmd_scaled = self.commands * np.array([4.0, 4.0, 1.0])
 
@@ -331,7 +362,7 @@ class PremaidWalkEnv:
     def step(self, action: np.ndarray):
         c, m, d, r = self.cfg, self.model, self.data, self.rng
         action = np.clip(np.asarray(action, dtype=np.float64), -c.action_clip, c.action_clip)
-        d.ctrl[:] = self.default_q + self.action_scale * action
+        target = self.default_q + self.action_scale * action + self.servo_bias
 
         # random push: kick the base velocity
         t = self.step_count * self.dt
@@ -344,8 +375,14 @@ class PremaidWalkEnv:
 
         torque_sq = 0.0
         self._recycle_debris()
+        max_move = self.vmax * m.opt.timestep
         for _ in range(self.decimation):
+            self.cmd_buf.append(target)
+            delayed = self.cmd_buf[0]  # command from cmd_delay substeps ago
+            self.servo_ref += np.clip(delayed - self.servo_ref, -max_move, max_move)
+            d.ctrl[:] = self.servo_ref
             mujoco.mj_step(m, d)
+            self.joint_hist.append((d.qpos[self.qadr].copy(), d.qvel[self.vadr].copy()))
             torque_sq += float(np.sum(np.square(d.actuator_force)))
         torque_sq /= self.decimation
         self.step_count += 1

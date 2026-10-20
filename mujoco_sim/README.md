@@ -66,9 +66,7 @@ files that aren't committed, so the robot was rebuilt from
   in `premaid_env.py`, from `premaidai_controller/config/joint_config.yaml`), so
   the policy's action vector maps 1:1 onto servo IDs 2–28.
 * Servo torque limits from the URDF: 1.37 N·m legs, 0.91 N·m arms/head.
-  Position gains kp = 6 (legs) / 3 (arms), kv = 0.08, armature 0.002. These are
-  guesses, not measurements — randomized ±20% during training. Tune them in
-  `tools/build_mjcf.py` once you have servo step-response data.
+* Servo dynamics fitted to RCB-4 step responses (see "Servo model" below).
 * The URDF inertias are labelled `e-5` but are really in units of 1e-7 kg·m²
   (checked against each mesh's convex hull); the builder fixes that.
 * Collisions: flat box soles for the feet, convex hulls for the rest. Legs
@@ -111,3 +109,19 @@ floor itself counts as a fall. TensorBoard: `Curriculum/debris_level`.
 
 Tune in `WalkCfg` (`debris_max_height`, `debris_ring`, `debris_level_step`), or turn off with
 `debris=False`. Watch it with `python play_mujoco.py --debris 1`.
+
+## Servo model (fitted to the real servos)
+
+`tools/fit_servo.py` replays the `servo_test.py` recordings (servos 10, 13, 14; 20° steps) on the
+robot model held in the air and fits the servo model. Result: kp 43.6, kv 0.30 (armature 0.002),
+reference slewing at ≤ 3.9 rad/s (~220°/s), RMS error 0.9°:
+
+![servo fit](docs/servo_fit.png)
+
+During training each episode randomizes: slew speed ±20%, command delay 0–20 ms, joint-reading
+staleness 0–20 ms (the RCB-4 refreshes positions every ~20 ms), a per-servo settle offset of up to
+~1°, plus the existing ±20% gain randomization. Re-run the fit after recording more servos:
+
+```bash
+python tools/fit_servo.py --data_dir .. --plot docs/servo_fit.png
+```

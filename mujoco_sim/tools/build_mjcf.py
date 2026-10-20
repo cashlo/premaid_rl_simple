@@ -303,9 +303,12 @@ def build(bounds, kp_leg, kp_arm, kv):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--description", required=True, help="path to a clone of chikuta/premaidai_description")
-    ap.add_argument("--kp-leg", type=float, default=6.0)
-    ap.add_argument("--kp-arm", type=float, default=3.0)
-    ap.add_argument("--kv", type=float, default=0.08)
+    # Fitted to the RCB-4 step responses of servos 10, 13 and 14 (tools/fit_servo.py). Arm and leg
+    # servos responded the same; they differ only in torque limit. The ~220 deg/s slew limit and
+    # command/sensor delays live in premaid_env.py.
+    ap.add_argument("--kp-leg", type=float, default=43.6)
+    ap.add_argument("--kp-arm", type=float, default=43.6)
+    ap.add_argument("--kv", type=float, default=0.30)
     args = ap.parse_args()
 
     bounds = convert_meshes(args.description)
