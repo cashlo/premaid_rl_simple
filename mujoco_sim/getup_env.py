@@ -195,6 +195,10 @@ class PremaidGetUpEnv(PremaidWalkEnv):
     def _sample_commands(self):
         self.commands[:] = 0.0
 
+    def _observe(self):
+        self.commands[:] = 0.0  # get-up never takes commands (keeps viewer key presses out of the obs)
+        return super()._observe()
+
     def _update_curriculum(self, terminated_early: bool):
         pass
 
