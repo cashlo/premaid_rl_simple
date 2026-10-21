@@ -159,7 +159,7 @@ class Builder:
         side_lim = lambda r, l: r if s < 0 else l  # noqa: E731
         col = lambda n: f'<geom class="body_col" mesh="{n}"/>'  # noqa: E731
         hand = self.link(f"{p}_hand", A["hand"], (0, s * 0.061348, 0),
-                         (f"{p}_wry_joint", (0, 1, 0), -135.0, 118.125, ARM_EFFORT), [], "", indent + 5)
+                         (f"{p}_wry_joint", (0, 1, 0), -135.0, 118.125, ARM_EFFORT), [], col(f"{p}_hand"), indent + 5)
         larm = self.link(f"{p}_larm", A["larm"], (0, s * 0.024054, 0),
                          (f"{p}_elx_joint", (1, 0, 0), *side_lim((-13.5, 118.96875), (-118.96875, 13.5)), ARM_EFFORT), [hand], col(f"{p}_larm"), indent + 4)
         ljoint = self.link(f"{p}_larm_joint", A["larm_joint"], (0.0088013, s * 0.060007, 0),

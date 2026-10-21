@@ -4,6 +4,7 @@
     python train_mujoco.py                          # fresh run, all CPU cores
     python train_mujoco.py --num_envs 512 --workers 15
     python train_mujoco.py --resume latest          # continue from newest checkpoint
+    python train_mujoco.py --task getup             # get-up-from-lying task (runs/premaid_getup)
 
 Logs + checkpoints go to runs/premaid_mujoco/<time>_PPO/ (TensorBoard: `tensorboard --logdir runs`).
 """
@@ -24,7 +25,7 @@ from skrl.resources.preprocessors.torch import RunningStandardScaler
 from skrl.resources.schedulers.torch import KLAdaptiveLR
 from skrl.trainers.torch import SequentialTrainer
 
-from premaid_env import WalkCfg
+from tasks import TASKS
 from vec_env import SkrlPremaidWrapper, SubprocVecPremaid
 
 RUN_DIR = os.path.join("runs", "premaid_mujoco")
@@ -64,7 +65,7 @@ class Value(DeterministicMixin, Model):
         return self.net(inputs["states"]), {}
 
 
-def make_agent(env, device, rollouts=24):
+def make_agent(env, device, rollouts=24, run_dir=RUN_DIR):
     models = {
         "policy": Policy(env.observation_space, env.action_space, device),
         "value": Value(env.state_space, device),
@@ -91,7 +92,7 @@ def make_agent(env, device, rollouts=24):
         value_loss_scale=1.0,
         time_limit_bootstrap=True,
     )
-    cfg.experiment.directory = RUN_DIR
+    cfg.experiment.directory = run_dir
     cfg.experiment.write_interval = 50
     cfg.experiment.checkpoint_interval = 1000
     memory = RandomMemory(memory_size=rollouts, num_envs=env.num_envs, device=device)
@@ -102,12 +103,12 @@ def make_agent(env, device, rollouts=24):
     return agent
 
 
-def find_checkpoint(spec: str) -> str:
+def find_checkpoint(spec: str, run_dir: str = RUN_DIR) -> str:
     if spec != "latest":
         return spec
-    cands = glob.glob(os.path.join(RUN_DIR, "*", "checkpoints", "*.pt"))
+    cands = glob.glob(os.path.join(run_dir, "*", "checkpoints", "*.pt"))
     if not cands:
-        raise FileNotFoundError(f"no checkpoints under {RUN_DIR}/")
+        raise FileNotFoundError(f"no checkpoints under {run_dir}/")
     return max(cands, key=os.path.getmtime)
 
 
@@ -120,20 +121,23 @@ def main():
     ap.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     ap.add_argument("--resume", default=None, help="checkpoint path or 'latest'")
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--task", default="walk", choices=list(TASKS))
     ap.add_argument("--no_randomize", action="store_true", help="disable domain randomization/pushes")
     ap.add_argument("--viewer", action="store_true", help="open a live MuJoCo window showing robot #0 while training")
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
-    cfg = WalkCfg(randomize=not args.no_randomize)
+    task = TASKS[args.task]
+    cfg = task["cfg"](randomize=not args.no_randomize)
     vec = SubprocVecPremaid(args.num_envs, args.workers, seed=args.seed, cfg=cfg, viewer=args.viewer)
     env = SkrlPremaidWrapper(vec, device=args.device)
     gpu = f" ({torch.cuda.get_device_name(0)})" if str(args.device).startswith("cuda") else ""
     print(f"[INFO] {env.num_envs} robots on {len(vec.procs)} CPU workers, learner on {args.device}{gpu}")
 
-    agent = make_agent(env, args.device, args.rollouts)
+    print(f"[INFO] task: {args.task}")
+    agent = make_agent(env, args.device, args.rollouts, run_dir=task["run_dir"])
     if args.resume:
-        path = find_checkpoint(args.resume)
+        path = find_checkpoint(args.resume, task["run_dir"])
         print(f"[INFO] resuming from {path}")
         agent.load(path)
 

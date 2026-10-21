@@ -17,7 +17,8 @@ import numpy as np
 import torch
 from skrl.envs.wrappers.torch.base import Wrapper
 
-from premaid_env import NUM_ACTIONS, NUM_OBS, NUM_STATES, PremaidWalkEnv, WalkCfg
+from premaid_env import NUM_ACTIONS, NUM_OBS, NUM_STATES, WalkCfg
+from tasks import make_env
 
 
 def _open_viewer(env):
@@ -35,7 +36,7 @@ def _open_viewer(env):
 def _worker(remote, parent_remote, n, seed, cfg, viewer=False):
     parent_remote.close()
     os.environ.setdefault("OMP_NUM_THREADS", "1")
-    envs = [PremaidWalkEnv(cfg, seed=seed + i) for i in range(n)]
+    envs = [make_env(cfg, seed=seed + i) for i in range(n)]
     view = _open_viewer(envs[0]) if viewer else None
     obs = np.zeros((n, NUM_OBS), np.float32)
     st = np.zeros((n, NUM_STATES), np.float32)

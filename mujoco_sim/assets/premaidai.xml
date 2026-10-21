@@ -176,6 +176,7 @@
                 <joint name="r_wry_joint" axis="0 1 0" range="-2.35619 2.06167"/>
                 <inertial pos="0.001817 -0.018911 0.002717" mass="0.0046" fullinertia="8.19397e-07 3.11171e-07 9.08188e-07 1.78483e-08 1.94812e-08 2.00353e-07"/>
                 <geom class="visual" mesh="r_hand"/>
+                <geom class="body_col" mesh="r_hand"/>
               </body>
             </body>
           </body>
@@ -203,6 +204,7 @@
                 <joint name="l_wry_joint" axis="0 1 0" range="-2.35619 2.06167"/>
                 <inertial pos="0.001817 0.018911 0.002717" mass="0.0046" fullinertia="8.19397e-07 3.11171e-07 9.08188e-07 -1.78483e-08 1.94812e-08 -2.00353e-07"/>
                 <geom class="visual" mesh="l_hand"/>
+                <geom class="body_col" mesh="l_hand"/>
               </body>
             </body>
           </body>

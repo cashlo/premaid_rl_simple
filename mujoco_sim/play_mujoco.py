@@ -4,6 +4,7 @@
     python play_mujoco.py --checkpoint path/to/agent_5000.pt
     python play_mujoco.py --video walk.mp4 --cmd 0.12 0 0 --seconds 10     # headless video
     python play_mujoco.py --export premaid_policy.pt   # TorchScript (obs -> action) for deployment
+    python play_mujoco.py --task getup --video getup.mp4 --seconds 10   # get-up policy from random lying poses
 
 Viewer keys (click the viewer window first):
     Up / Down      forward / backward speed
@@ -68,6 +69,7 @@ class DeterministicPolicy(torch.nn.Module):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--checkpoint", default="latest")
+    ap.add_argument("--task", default="walk", choices=["walk", "getup"])
     ap.add_argument("--video", default=None, help="write an mp4 instead of opening the viewer")
     ap.add_argument("--cmd", type=float, nargs=3, default=[0.12, 0.0, 0.0], metavar=("VX", "VY", "YAW"))
     ap.add_argument("--seconds", type=float, default=10.0)
@@ -76,7 +78,9 @@ def main():
     ap.add_argument("--debris", type=float, default=0.0, help="floor debris level 0 (flat) .. 1 (hardest)")
     args = ap.parse_args()
 
-    path = find_checkpoint(args.checkpoint)
+    from tasks import TASKS, make_env
+
+    path = find_checkpoint(args.checkpoint, TASKS[args.task]["run_dir"])
     print(f"[INFO] loading {path}")
     policy = DeterministicPolicy(load_agent(path)).eval()
 
@@ -86,10 +90,13 @@ def main():
         print("       joint target = default_pose + action * scale (0.30 legs / 0.20 arms+head), servo-ID order")
         return
 
-    env = PremaidWalkEnv(
-        WalkCfg(randomize=args.randomize, obs_noise=args.randomize, debris_level_init=args.debris, debris_level_step=0.0),
-        seed=0,
-    )
+    if args.task == "getup":
+        env = make_env(TASKS["getup"]["cfg"](randomize=args.randomize, obs_noise=args.randomize), seed=0)
+    else:
+        env = PremaidWalkEnv(
+            WalkCfg(randomize=args.randomize, obs_noise=args.randomize, debris_level_init=args.debris, debris_level_step=0.0),
+            seed=0,
+        )
     env.manual_commands = True
     env.commands[:] = args.cmd
     obs, _ = env.reset()

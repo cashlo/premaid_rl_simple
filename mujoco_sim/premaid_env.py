@@ -149,6 +149,7 @@ class PremaidWalkEnv:
         self.default_q = np.array([DEFAULT_POSE.get(n, 0.0) for n in SERVO_ORDER])
         self.jnt_lo = m.jnt_range[jids, 0].copy()
         self.jnt_hi = m.jnt_range[jids, 1].copy()
+        self.ctrl_lo, self.ctrl_hi = m.actuator_ctrlrange[:, 0].copy(), m.actuator_ctrlrange[:, 1].copy()
         is_leg = np.array([n in LEG_JOINTS for n in SERVO_ORDER])
         self.action_scale = np.where(is_leg, self.cfg.action_scale_leg, self.cfg.action_scale_upper)
         self.hip_roll_idx = np.array([SERVO_ORDER.index(n) for n in ("r_hpx", "l_hpx")])
@@ -364,7 +365,7 @@ class PremaidWalkEnv:
     def step(self, action: np.ndarray):
         c, m, d, r = self.cfg, self.model, self.data, self.rng
         action = np.clip(np.asarray(action, dtype=np.float64), -c.action_clip, c.action_clip)
-        target = self.default_q + self.action_scale * action + self.servo_bias
+        target = np.clip(self.default_q + self.action_scale * action + self.servo_bias, self.ctrl_lo, self.ctrl_hi)
 
         # random push: kick the base velocity
         t = self.step_count * self.dt

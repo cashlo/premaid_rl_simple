@@ -11,7 +11,13 @@ Work through the modes in order the first time:
                                                     the policy, robot in a harness first! keys: w/s fwd/back,
                                                     a/d strafe, q/e turn, space = stop walking, x = quit (go limp)
 
-  add --sim to any of stand/run to drive a MuJoCo copy of the robot instead (same servo model and
+  python deploy_policy.py --mode getup --getup_checkpoint ../runs/premaid_getup/<run>/checkpoints/agent_N.pt
+                                    [--checkpoint <walking agent>]
+                                                    from lying down: get-up policy until the robot is upright and
+                                                    settled in the crouch, then hand over to the walking policy
+                                                    (standing still) or, without --checkpoint, hold the crouch
+
+  add --sim to any of stand/run/getup to drive a MuJoCo copy of the robot instead (same servo model and
   delays as training) -- a full end-to-end test of this script without hardware.
 
 Ports: --rcb4 COM5 (115200 default; 1250000 recommended, see bench) --imu COM4 (1 Mbps binary stream).
@@ -45,7 +51,7 @@ FALL_TILT = 0.7  # |gravity_xy| in body frame (~44 deg)
 class Policy:
     """Builds exactly the 86-value observation premaid_env.PremaidWalkEnv gives the actor."""
 
-    def __init__(self, path):
+    def __init__(self, path, task="walk"):
         import torch
 
         self.torch = torch
@@ -55,7 +61,12 @@ class Policy:
             from play_mujoco import DeterministicPolicy, load_agent
 
             self.net = DeterministicPolicy(load_agent(path)).eval()
-        cfg = WalkCfg()
+        if task == "getup":
+            from getup_env import GetUpCfg
+
+            cfg = GetUpCfg()
+        else:
+            cfg = WalkCfg()
         self.default_q = np.array([DEFAULT_POSE.get(n, 0.0) for n in SERVO_ORDER])
         self.scale = np.array([cfg.action_scale_leg if n in LEG_JOINTS else cfg.action_scale_upper for n in SERVO_ORDER])
         self.clip = cfg.action_clip
@@ -113,11 +124,11 @@ class Keyboard:
         return out
 
 
-def make_robot(args):
+def make_robot(args, task="walk"):
     from robot_io import RealRobot, SimRobot
 
     if args.sim:
-        return SimRobot(randomize=args.sim_randomize, render=args.render)
+        return SimRobot(randomize=args.sim_randomize, render=args.render, task=task, seed=args.seed)
     return RealRobot(args.rcb4, args.rcb4_baud, args.imu, args.imu_baud, args.lib_dir)
 
 
@@ -312,10 +323,67 @@ def mode_run(args):
                   f"over budget {np.mean(lm > CTRL_DT * 1e3) * 100:.0f}% of steps")
 
 
+def mode_getup(args):
+    if not args.getup_checkpoint:
+        raise SystemExit("--getup_checkpoint is required for --mode getup")
+    up = Policy(args.getup_checkpoint, task="getup")
+    walk = Policy(args.checkpoint) if args.checkpoint else None
+    robot = make_robot(args, task="getup")
+    if not args.sim and not confirm("Get-up with torque ON. Clear space around the robot, hand near the power switch?"):
+        robot.close()
+        return
+    realtime = (not args.sim) or args.render
+    zero = np.zeros(3)
+    settled, phase, t_up = 0, "getup", None
+    t = time.perf_counter()
+    try:
+        s = robot.read()
+        if s["grav"] is None:
+            raise RuntimeError("no IMU data -- check --imu port")
+        robot.write(s["q"])  # torque on, holding the current pose
+        up.reset()
+        for step in range(int(args.seconds / CTRL_DT)):
+            s = robot.read()
+            if phase == "getup":
+                robot.write(up.act(up.observe(s, zero)))
+                tilt = np.linalg.norm(s["grav"][:2])
+                pose_err = np.linalg.norm(s["q"] - up.default_q)
+                ok = tilt < 0.3 and np.linalg.norm(s["gyro"]) < 0.6 and pose_err < 0.35
+                settled = settled + 1 if ok else 0
+                if settled >= int(0.5 / CTRL_DT):
+                    t_up = step * CTRL_DT
+                    print(f"upright and settled after {t_up:.1f} s -> " + ("walking policy (standing)" if walk else "holding crouch"))
+                    phase = "walk" if walk else "hold"
+                    if walk:
+                        walk.reset()
+            elif phase == "walk":
+                if np.linalg.norm(s["grav"][:2]) > FALL_TILT:
+                    print("fell again -> back to get-up")
+                    phase, settled = "getup", 0
+                    up.reset()
+                    continue
+                robot.write(walk.act(walk.observe(s, zero)))
+            else:
+                robot.write(up.default_q)
+            t = tick(t + CTRL_DT, realtime)
+            if args.sim and phase != "getup" and step * CTRL_DT > t_up + args.hold_seconds:
+                break
+        if args.sim:
+            print(f"[sim] {'stood up in %.1f s' % t_up if t_up is not None else 'did NOT stand up'}; "
+                  f"final tilt {np.degrees(np.arcsin(min(1, np.linalg.norm(robot.read()['grav'][:2])))):.0f} deg")
+    except KeyboardInterrupt:
+        print("stopping -> limp")
+    finally:
+        robot.close()
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--mode", required=True, choices=["scan", "check", "bench", "stand", "run"])
-    ap.add_argument("--checkpoint", help="skrl .pt checkpoint or TorchScript from play_mujoco.py --export")
+    ap.add_argument("--mode", required=True, choices=["scan", "check", "bench", "stand", "run", "getup"])
+    ap.add_argument("--checkpoint", help="walking policy: skrl .pt checkpoint or TorchScript from play_mujoco.py --export")
+    ap.add_argument("--getup_checkpoint", help="get-up policy checkpoint (runs/premaid_getup/...)")
+    ap.add_argument("--hold_seconds", type=float, default=3.0, help="sim getup: keep running this long after standing")
+    ap.add_argument("--seed", type=int, default=0, help="sim: which random start (lying pose for getup)")
     ap.add_argument("--rcb4", default="COM5")
     ap.add_argument("--rcb4_baud", type=int, default=115200)
     ap.add_argument("--imu", default="COM4")
@@ -327,7 +395,8 @@ def main():
     ap.add_argument("--sim_randomize", action="store_true", help="sim: random delays/servo params/pushes")
     ap.add_argument("--render", action="store_true", help="sim: show a viewer (runs in real time)")
     args = ap.parse_args()
-    {"scan": mode_scan, "check": mode_check, "bench": mode_bench, "stand": mode_stand, "run": mode_run}[args.mode](args)
+    {"scan": mode_scan, "check": mode_check, "bench": mode_bench, "stand": mode_stand, "run": mode_run,
+     "getup": mode_getup}[args.mode](args)
 
 
 if __name__ == "__main__":

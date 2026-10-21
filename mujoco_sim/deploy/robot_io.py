@@ -198,11 +198,14 @@ class RealRobot:
 # MuJoCo stand-in (same servo model, delays and staleness as training)
 # ======================================================================================
 class SimRobot:
-    def __init__(self, randomize=False, seed=0, render=False):
-        from premaid_env import PremaidWalkEnv, WalkCfg
+    def __init__(self, randomize=False, seed=0, render=False, task="walk"):
+        from tasks import TASKS, make_env
 
-        cfg = WalkCfg(randomize=randomize, obs_noise=False, debris=False)
-        self.env = PremaidWalkEnv(cfg, seed=seed)
+        if task == "getup":  # starts lying down
+            cfg = TASKS["getup"]["cfg"](randomize=randomize, obs_noise=False)
+        else:
+            cfg = TASKS["walk"]["cfg"](randomize=randomize, obs_noise=False, debris=False)
+        self.env = make_env(cfg, seed=seed)
         self.env.manual_commands = True
         self.env.commands[:] = 0.0
         self.env.reset()
@@ -225,6 +228,7 @@ class SimRobot:
         e = self.env
         action = (np.asarray(q_target) - e.default_q) / e.action_scale
         e.step(action)
+        e.step_count = min(e.step_count, e.max_steps - 2)  # never time out: the deploy script decides
         if self.viewer is not None:
             self.viewer.sync()
 
