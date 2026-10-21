@@ -36,6 +36,10 @@ class GetUpCfg(WalkCfg):
     # lying-pose pool
     pool_size: int = 48
     pool_prone_frac: float = 0.4  # face down; the rest face up or on a side
+    # reverse curriculum: some episodes start from a squat (hands free, feet flat) so the last
+    # phase, squat -> stand, is learned first; otherwise sitting on the floor is a dead end
+    squat_frac: float = 0.3
+    squat_pool_size: int = 32
     init_noise: float = 0.05  # rad added to pool joint angles
 
     # rewards (x dt)
@@ -44,6 +48,7 @@ class GetUpCfg(WalkCfg):
     w_hip_height: float = 2.0  # hip (base) height / standing height, only counts while upright
     w_feet_down: float = 1.0  # while upright: both soles on the floor (not kneeling / sitting)
     w_leg_pose: float = 1.0  # while upright: legs folding toward the crouch shape (feet under the body)
+    leg_pose_sigma: float = 2.0  # wide, so it still has a slope from a sitting pose
     w_stand_pose: float = 2.0  # once up: joints near the crouch the walker starts from
     w_stand_feet: float = 1.0  # once up: both feet on the floor
     w_stand_still: float = 1.0  # once up: torso not moving
@@ -78,6 +83,7 @@ class PremaidGetUpEnv(PremaidWalkEnv):
         self._place_default(0.0)
         self.stand_head_z = float(self.data.xpos[self.head_id][2])
         self._pool = self._make_pool()
+        self._squat_pool = self._make_squat_pool()
         self.reset()
 
     # ------------------------------------------------------------------ lying poses
@@ -118,6 +124,40 @@ class PremaidGetUpEnv(PremaidWalkEnv):
             m.dof_damping[:] = damping
         return pool
 
+    def _make_squat_pool(self):
+        """Squats of random depth with the torso leaning forward and feet flat, settled for 0.5 s
+        with the servos holding the pose. Poses that topple are kept too (they become lying starts)."""
+        c, m, r = self.cfg, self.model, self.rng
+        from premaid_env import SERVO_ORDER
+
+        idx = {n: SERVO_ORDER.index(n) for n in SERVO_ORDER}
+        d = mujoco.MjData(m)
+        pool = []
+        for _ in range(c.squat_pool_size):
+            mujoco.mj_resetData(m, d)
+            q = self.default_q.copy()
+            depth = r.uniform(0.3, 1.0)
+            lean = r.uniform(0.2, 0.8) * depth
+            for s in "lr":
+                hip = -0.35 - depth * r.uniform(1.0, 1.3)
+                knee = 0.7 + depth * r.uniform(1.2, 1.4)
+                q[idx[f"{s}_hpy"]] = hip
+                q[idx[f"{s}_kny"]] = knee
+                q[idx[f"{s}_aky"]] = -(lean + hip + knee)  # foot flat on the floor
+                q[idx[f"{s}_shy"]] = r.uniform(-1.6, 0.3)  # arms anywhere from forward to down
+            q = np.clip(q, self.jnt_lo, self.jnt_hi)
+            d.qpos[self.qadr] = q
+            d.qpos[3:7] = _euler_to_quat(0.0, lean, r.uniform(-np.pi, np.pi))
+            d.qpos[2] = 0.5
+            mujoco.mj_kinematics(m, d)
+            lowest = min(d.geom_xpos[g][2] - float(np.abs(d.geom_xmat[g].reshape(3, 3)[2]) @ m.geom_size[g]) for g in self.sole_ids)
+            d.qpos[2] -= lowest - 0.002
+            d.ctrl[:] = q
+            for _ in range(int(0.5 / m.opt.timestep)):
+                mujoco.mj_step(m, d)
+            pool.append((d.qpos.copy(), d.qvel.copy()))
+        return pool
+
     # ------------------------------------------------------------------ API
     def reset(self):
         if self._pool is None:  # called from the base constructor before the pool exists
@@ -127,7 +167,9 @@ class PremaidGetUpEnv(PremaidWalkEnv):
         if not hasattr(self, "friction"):
             self.friction = float(m.geom_friction[self.floor_id, 0])
         mujoco.mj_resetData(m, d)
-        qpos, qvel = self._pool[r.integers(len(self._pool))]
+        self.squat_start = bool(r.random() < c.squat_frac)
+        pool = self._squat_pool if self.squat_start else self._pool
+        qpos, qvel = pool[r.integers(len(pool))]
         d.qpos[:] = qpos
         d.qvel[:] = qvel
         yaw = r.uniform(-np.pi, np.pi)  # spin the whole pose about the vertical axis
@@ -174,7 +216,7 @@ class PremaidGetUpEnv(PremaidWalkEnv):
         t["hip_height"] = c.w_hip_height * min(height, 1.0) * upright
         t["feet_down"] = c.w_feet_down * float(contact.all()) * upright
         leg = self.leg_idx
-        t["leg_pose"] = c.w_leg_pose * np.exp(-np.sum((q[leg] - self.default_q[leg]) ** 2) / 0.5) * upright
+        t["leg_pose"] = c.w_leg_pose * np.exp(-np.sum((q[leg] - self.default_q[leg]) ** 2) / c.leg_pose_sigma) * upright
         if standing:
             t["stand_pose"] = c.w_stand_pose * np.exp(-np.sum((q - self.default_q) ** 2) / 0.5)
             t["stand_feet"] = c.w_stand_feet * float(contact.all())
@@ -199,8 +241,9 @@ class PremaidGetUpEnv(PremaidWalkEnv):
     def episode_summary(self):
         out = super().episode_summary()
         out.pop("Curriculum/debris_level", None)
-        out["GetUp/standing_at_end"] = float(getattr(self, "_standing_now", False))
-        out["GetUp/time_to_stand_s"] = self.stood_at if self.stood_at is not None else self.cfg.episode_length_s
+        kind = "from_squat" if getattr(self, "squat_start", False) else "from_lying"
+        out[f"GetUp/standing_at_end_{kind}"] = float(getattr(self, "_standing_now", False))
+        out[f"GetUp/time_to_stand_s_{kind}"] = self.stood_at if self.stood_at is not None else self.cfg.episode_length_s
         return out
 
 

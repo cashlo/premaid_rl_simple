@@ -159,8 +159,8 @@ class SkrlPremaidWrapper(Wrapper):
         self._states = self._t(st)
         infos: dict[str, Any] = {}
         if summaries:
-            keys = summaries[0].keys()
-            infos["episode"] = {k: torch.tensor(float(np.mean([s[k] for s in summaries]))) for k in keys}
+            keys = {k for s in summaries for k in s}  # some keys only appear for some episode types
+            infos["episode"] = {k: torch.tensor(float(np.mean([s[k] for s in summaries if k in s]))) for k in keys}
         return (
             self._t(obs),
             self._t(rew).view(-1, 1),
