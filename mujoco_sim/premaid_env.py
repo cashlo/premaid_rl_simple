@@ -106,9 +106,9 @@ class WalkCfg:
 
     # rewards (each is multiplied by control_dt, like legged_gym / Isaac Lab)
     w_track_lin: float = 2.0
-    w_track_ang: float = 1.0
+    w_track_ang: float = 1.5
     sigma_lin: float = 0.07  # m/s
-    sigma_ang: float = 0.4  # rad/s
+    sigma_ang: float = 0.2  # rad/s; at 0.4 a 0.15 rad/s drift or a 75%-short turn still scored ~0.9
     w_alive: float = 1.0
     w_lin_vel_z: float = -2.0
     w_ang_vel_xy: float = -0.05
@@ -121,7 +121,8 @@ class WalkCfg:
     w_swing_height: float = -200.0
     swing_height: float = 0.025
     w_feet_slip: float = -1.0
-    w_hip_pose: float = -1.0  # keep hip yaw/roll near default
+    w_hip_roll: float = -1.0  # keep hip roll near default
+    w_hip_yaw: float = -1.0  # keep hip yaw near default, only when not asked to turn (it's the turning joint)
     w_upper_pose: float = -0.3  # arms/head near default
     w_joint_limit: float = -2.0
     termination_penalty: float = -5.0
@@ -150,7 +151,8 @@ class PremaidWalkEnv:
         self.jnt_hi = m.jnt_range[jids, 1].copy()
         is_leg = np.array([n in LEG_JOINTS for n in SERVO_ORDER])
         self.action_scale = np.where(is_leg, self.cfg.action_scale_leg, self.cfg.action_scale_upper)
-        self.hip_idx = np.array([SERVO_ORDER.index(n) for n in ("r_hpz", "l_hpz", "r_hpx", "l_hpx")])
+        self.hip_roll_idx = np.array([SERVO_ORDER.index(n) for n in ("r_hpx", "l_hpx")])
+        self.hip_yaw_idx = np.array([SERVO_ORDER.index(n) for n in ("r_hpz", "l_hpz")])
         self.upper_idx = np.array([SERVO_ORDER.index(n) for n in UPPER_JOINTS])
 
         self.base_id = m.body("base_link").id
@@ -437,7 +439,9 @@ class PremaidWalkEnv:
         else:
             terms["swing_height"] = 0.0
         terms["feet_slip"] = c.w_feet_slip * np.sum(np.sum(np.square(foot_vel[:, :2]), axis=1) * contact)
-        terms["hip_pose"] = c.w_hip_pose * np.sum(np.square(q[self.hip_idx] - self.default_q[self.hip_idx]))
+        hr, hy = self.hip_roll_idx, self.hip_yaw_idx
+        terms["hip_roll"] = c.w_hip_roll * np.sum(np.square(q[hr] - self.default_q[hr]))
+        terms["hip_yaw"] = c.w_hip_yaw * np.sum(np.square(q[hy] - self.default_q[hy])) * (self.commands[2] == 0.0)
         terms["upper_pose"] = c.w_upper_pose * np.sum(np.square(q[self.upper_idx] - self.default_q[self.upper_idx]))
         span = self.jnt_hi - self.jnt_lo
         soft_lo, soft_hi = self.jnt_lo + 0.05 * span, self.jnt_hi - 0.05 * span
