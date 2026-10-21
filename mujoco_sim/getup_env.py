@@ -41,7 +41,9 @@ class GetUpCfg(WalkCfg):
     # rewards (x dt)
     w_upright: float = 2.0  # 0..1 from lying flat to vertical torso
     w_height: float = 2.0  # HEAD height / standing head height (hip height alone rewards kneeling head-down)
-    w_hip_height: float = 0.5  # hip (base) height / standing height
+    w_hip_height: float = 2.0  # hip (base) height / standing height, only counts while upright
+    w_feet_down: float = 1.0  # while upright: both soles on the floor (not kneeling / sitting)
+    w_leg_pose: float = 1.0  # while upright: legs folding toward the crouch shape (feet under the body)
     w_stand_pose: float = 2.0  # once up: joints near the crouch the walker starts from
     w_stand_feet: float = 1.0  # once up: both feet on the floor
     w_stand_still: float = 1.0  # once up: torso not moving
@@ -70,6 +72,9 @@ class PremaidGetUpEnv(PremaidWalkEnv):
             m.geom_conaffinity[self.robot_geoms] |= 4
         self.force_lim = m.actuator_forcerange[:, 1].copy()
         self.head_id = m.body("head").id
+        from premaid_env import LEG_JOINTS, SERVO_ORDER
+
+        self.leg_idx = np.array([SERVO_ORDER.index(n) for n in LEG_JOINTS])
         self._place_default(0.0)
         self.stand_head_z = float(self.data.xpos[self.head_id][2])
         self._pool = self._make_pool()
@@ -166,7 +171,10 @@ class PremaidGetUpEnv(PremaidWalkEnv):
         t = {}
         t["upright"] = c.w_upright * upright
         t["height"] = c.w_height * min(head, 1.0)
-        t["hip_height"] = c.w_hip_height * min(height, 1.0)
+        t["hip_height"] = c.w_hip_height * min(height, 1.0) * upright
+        t["feet_down"] = c.w_feet_down * float(contact.all()) * upright
+        leg = self.leg_idx
+        t["leg_pose"] = c.w_leg_pose * np.exp(-np.sum((q[leg] - self.default_q[leg]) ** 2) / 0.5) * upright
         if standing:
             t["stand_pose"] = c.w_stand_pose * np.exp(-np.sum((q - self.default_q) ** 2) / 0.5)
             t["stand_feet"] = c.w_stand_feet * float(contact.all())
