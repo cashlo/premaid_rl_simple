@@ -1,0 +1,227 @@
+<mujoco model="premaidai">
+  <compiler angle="radian" meshdir="../../mujoco_sim/assets/meshes/"/>
+
+  <option timestep="0.005" impratio="10" integrator="implicitfast" cone="elliptic"/>
+
+  <visual>
+    <global offwidth="1280" offheight="720"/>
+    <headlight ambient="0.3 0.3 0.3" diffuse="0.6 0.6 0.6"/>
+  </visual>
+
+  <default>
+    <default class="premaid">
+      <joint armature="0.002" damping="0.05" frictionloss="0.01"/>
+      <default class="visual">
+        <geom type="mesh" contype="0" conaffinity="0" group="2" density="0" rgba="0.92 0.92 0.95 1"/>
+      </default>
+      <default class="body_col">
+        <geom type="mesh" conaffinity="0" group="3" density="0" rgba="0.8 0.3 0.3 0.4"/>
+      </default>
+      <default class="leg_col">
+        <geom type="mesh" contype="3" conaffinity="2" group="3" density="0" rgba="0.3 0.3 0.8 0.4"/>
+      </default>
+      <default class="foot">
+        <geom contype="3" conaffinity="3" condim="4" group="3" friction="0.9 0.02 0.002" solref="0.01" density="0" rgba="0.2 0.2 0.2 1"/>
+      </default>
+    </default>
+  </default>
+
+  <asset>
+    <mesh name="body" file="body.stl"/>
+    <mesh name="head" file="head.stl"/>
+    <mesh name="l_ankle" file="l_ankle.stl"/>
+    <mesh name="l_foot" file="l_foot.stl"/>
+    <mesh name="l_hand" file="l_hand.stl"/>
+    <mesh name="l_hip_joint" file="l_hip_joint.stl"/>
+    <mesh name="l_larm" file="l_larm.stl"/>
+    <mesh name="l_larm_joint" file="l_larm_joint.stl"/>
+    <mesh name="l_lleg" file="l_lleg.stl"/>
+    <mesh name="l_uarm" file="l_uarm.stl"/>
+    <mesh name="l_uarm_joint" file="l_uarm_joint.stl"/>
+    <mesh name="l_uleg" file="l_uleg.stl"/>
+    <mesh name="l_uleg_root" content_type="model/stl" file="l_uleg_root.stl"/>
+    <mesh name="neck_pitch" file="neck_pitch.stl"/>
+    <mesh name="neck_yaw" file="neck_yaw.stl"/>
+    <mesh name="r_ankle" file="r_ankle.stl"/>
+    <mesh name="r_foot" file="r_foot.stl"/>
+    <mesh name="r_hand" file="r_hand.stl"/>
+    <mesh name="r_hip_joint" file="r_hip_joint.stl"/>
+    <mesh name="r_larm" file="r_larm.stl"/>
+    <mesh name="r_larm_joint" file="r_larm_joint.stl"/>
+    <mesh name="r_lleg" file="r_lleg.stl"/>
+    <mesh name="r_uarm" file="r_uarm.stl"/>
+    <mesh name="r_uarm_joint" file="r_uarm_joint.stl"/>
+    <mesh name="r_uleg" file="r_uleg.stl"/>
+    <mesh name="r_uleg_root" file="r_uleg_root.stl"/>
+  </asset>
+
+  <worldbody>
+    <body name="base_link" childclass="premaid" pos="0 0 0.26">
+      <inertial pos="0.008509 2e-06 0.070698" quat="0.997643 -8.11962e-07 -0.0686115 -3.52079e-06" mass="0.4426" diaginertia="0.000290391 0.000267208 0.000115556"/>
+      <joint name="root" type="free" armature="0" damping="0" frictionloss="0"/>
+      <geom class="visual" mesh="body"/>
+      <geom name="base_link_col" size="0.036877 0.0474655 0.0702644" pos="0.00896785 1.50713e-06 0.0678055" type="box" group="3" friction="0.3" density="0" rgba="0.8 0.3 0.3 0.4"/>
+      <site name="imu" pos="0 0 0.07" size="0.006"/>
+      <body name="r_hip_joint" pos="0.004225 -0.0195245 0.001412">
+        <inertial pos="0 -0.000183 -0.010532" quat="0.482825 0.516604 0.482825 0.516604" mass="0.0143" diaginertia="5.37929e-06 4.60921e-06 2.01389e-06"/>
+        <joint name="r_hpz_joint" pos="0 0 0" axis="0 0 1" range="-1.41372 1.78774"/>
+        <geom class="visual" mesh="r_hip_joint"/>
+        <body name="r_uleg_root" pos="0 0.0021 -0.028">
+          <inertial pos="0 -0.01342 -0.004373" quat="0.751386 0.659863 8.40722e-05 -7.1955e-05" mass="0.0648" diaginertia="2.46004e-05 2.39258e-05 1.91119e-05"/>
+          <joint name="r_hpx_joint" pos="0 0 0" axis="1 0 0" range="-0.44244 0.39642"/>
+          <geom class="visual" mesh="r_uleg_root"/>
+          <body name="r_uleg" pos="0 -0.0128525 -0.034358">
+            <inertial pos="0 1e-06 -0.032601" mass="0.1134" diaginertia="8.84391e-05 8.2549e-05 2.22802e-05"/>
+            <joint name="r_hpy_joint" pos="0 0 0" axis="0 1 0" range="-1.59872 1.57451"/>
+            <geom class="visual" mesh="r_uleg"/>
+            <geom name="r_uleg_col" size="0.0213281 0.0265721" pos="-3.00043e-09 1.10446e-06 -0.0326006" quat="1 -4.42569e-08 -2.41544e-08 0" type="capsule" group="3" friction="0.3" density="0" rgba="0.8 0.3 0.3 0.4"/>
+            <body name="r_lleg" pos="0 0 -0.0652">
+              <inertial pos="-0.001624 -0.002494 -0.034776" quat="0.70539 0.705533 0.0503356 -0.045971" mass="0.0719" diaginertia="7.40469e-05 4.75666e-05 4.3465e-05"/>
+              <joint name="r_kny_joint" pos="0 0 0" axis="0 1 0" range="-0.03652 2.08811"/>
+              <geom class="visual" mesh="r_lleg"/>
+              <geom name="r_lleg_col" size="0.0289913 0.0194217" pos="0.00166206 -0.000369183 -0.0316714" quat="0.0223763 0.056264 -0.998165 0" type="capsule" group="3" friction="0.3" density="0" rgba="0.8 0.3 0.3 0.4"/>
+              <body name="r_ankle" pos="0 0 -0.065">
+                <inertial pos="-0.009629 0.000379 -0.003702" quat="0.443541 0.550701 0.550701 0.443541" mass="0.0571" diaginertia="2.57426e-05 2.2701e-05 1.72782e-05"/>
+                <joint name="r_aky_joint" pos="0 0 0" axis="0 1 0" range="-1.07089 0.42412"/>
+                <geom class="visual" mesh="r_ankle"/>
+                <geom name="r_ankle_col" size="0.0275 0.0171501 0.0292841" pos="-0.00655365 -0.000377854 -0.0162972" type="box" group="3" friction="0.3" density="0" rgba="0.8 0.3 0.3 0.4"/>
+                <body name="r_foot" pos="0 0 -0.040677">
+                  <inertial pos="0.005014 -0.008793 -0.004123" quat="-0.00365481 0.712262 0.0089969 0.701846" mass="0.0941" diaginertia="0.00012066 0.000101362 3.83027e-05"/>
+                  <joint name="r_akx_joint" pos="0 0 0" axis="1 0 0" range="-0.66739 0.6509"/>
+                  <geom class="visual" mesh="r_foot"/>
+                  <geom name="r_sole" class="foot" size="0.0711999 0.03315 0.005" pos="0.00621794 -0.0090622 -0.0126996" type="box"/>
+                  <geom name="r_foot_col" size="0.0711999 0.03315 0.0135848" pos="0.00621794 -0.0090622 0.00894186" type="box" group="3" friction="0.3" density="0" rgba="0.8 0.3 0.3 0.4"/>
+                  <site name="r_foot_site" pos="0.00621794 -0.0090622 -0.0176996"/>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="l_hip_joint" pos="0.004225 0.0195245 0.001412">
+        <inertial pos="0 0.000183 -0.010532" quat="0.516604 0.482825 0.516604 0.482825" mass="0.0143" diaginertia="5.37929e-06 4.60921e-06 2.01389e-06"/>
+        <joint name="l_hpz_joint" pos="0 0 0" axis="0 0 1" range="-1.41372 1.78774"/>
+        <geom class="visual" mesh="l_hip_joint"/>
+        <body name="l_uleg_root" pos="0 -0.0021 -0.028">
+          <inertial pos="0 0.01342 -0.004373" quat="0.659863 0.751386 7.1955e-05 -8.40722e-05" mass="0.0648" diaginertia="2.46004e-05 2.39258e-05 1.91119e-05"/>
+          <joint name="l_hpx_joint" pos="0 0 0" axis="1 0 0" range="-0.39642 0.44244"/>
+          <geom class="visual" contype="1" conaffinity="1" friction="0.3" mesh="l_uleg_root"/>
+          <body name="l_uleg" pos="0 0.0128525 -0.034358">
+            <inertial pos="0 1e-06 -0.032601" mass="0.1134" diaginertia="8.84391e-05 8.2549e-05 2.22802e-05"/>
+            <joint name="l_hpy_joint" pos="0 0 0" axis="0 1 0" range="-1.59872 1.57451"/>
+            <geom class="visual" mesh="l_uleg"/>
+            <geom name="l_uleg_col" size="0.0213281 0.0265721" pos="-2.99719e-09 1.14916e-06 -0.0326006" type="capsule" group="3" friction="0.3" density="0" rgba="0.8 0.3 0.3 0.4"/>
+            <body name="l_lleg" pos="0 0 -0.0652">
+              <inertial pos="-0.001624 0.002494 -0.034776" quat="0.705533 0.70539 0.045971 -0.0503356" mass="0.0719" diaginertia="7.40469e-05 4.75666e-05 4.3465e-05"/>
+              <joint name="l_kny_joint" pos="0 0 0" axis="0 1 0" range="-0.03652 2.08811"/>
+              <geom class="visual" mesh="l_lleg"/>
+              <geom name="l_lleg_col" size="0.0289913 0.0194217" pos="0.00166206 0.000370654 -0.0316714" quat="0.0223763 -0.0562614 -0.998165 0" type="capsule" group="3" friction="0.3" density="0" rgba="0.8 0.3 0.3 0.4"/>
+              <body name="l_ankle" pos="0 0 -0.065">
+                <inertial pos="-0.009629 0.000379 -0.003702" quat="0.443541 0.550701 0.550701 0.443541" mass="0.0571" diaginertia="2.57426e-05 2.2701e-05 1.72782e-05"/>
+                <joint name="l_aky_joint" pos="0 0 0" axis="0 1 0" range="-1.07089 0.42412"/>
+                <geom class="visual" mesh="l_ankle"/>
+                <geom name="l_ankle_col" size="0.0275 0.0171501 0.0292841" pos="-0.00655353 0.000378543 -0.0162972" type="box" group="3" friction="0.3" density="0" rgba="0.8 0.3 0.3 0.4"/>
+                <body name="l_foot" pos="0 0 -0.040677">
+                  <inertial pos="0.005014 0.008793 -0.004123" quat="0.00365481 0.712262 -0.0089969 0.701846" mass="0.0941" diaginertia="0.00012066 0.000101362 3.83027e-05"/>
+                  <joint name="l_akx_joint" pos="0 0 0" axis="1 0 0" range="-0.6509 0.66739"/>
+                  <geom class="visual" mesh="l_foot"/>
+                  <geom name="l_sole" class="foot" size="0.0711999 0.03315 0.005" pos="0.00621794 0.00906241 -0.0126996" type="box"/>
+                  <geom name="l_foot_col" size="0.0711999 0.03315 0.0135848" pos="0.00621794 0.00906241 0.00894186" type="box" group="3" friction="0.3" density="0" rgba="0.8 0.3 0.3 0.4"/>
+                  <site name="l_foot_site" pos="0.00621794 0.00906241 -0.0176996"/>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="r_uarm_joint" pos="0 -0.0359 0.113043">
+        <inertial pos="0 -0.005109 0.000865" quat="0.0834205 0.702169 0.0834205 0.702169" mass="0.0131" diaginertia="1.33218e-05 1.15463e-05 3.90903e-06"/>
+        <joint name="r_shy_joint" pos="0 0 0" axis="0 1 0" range="-1.88496 2.23838"/>
+        <geom class="visual" mesh="r_uarm_joint"/>
+        <body name="r_uarm" pos="0 -0.0189 0">
+          <inertial pos="-1e-06 -0.02164 0.00067" quat="0.49579 0.504175 -0.504175 0.49579" mass="0.0712" diaginertia="4.14081e-05 3.56621e-05 1.26809e-05"/>
+          <joint name="r_shx_joint" pos="0 0 0" axis="1 0 0" range="-0.05301 1.59809"/>
+          <geom class="visual" mesh="r_uarm"/>
+          <geom name="r_uarm_col" size="0.0225063 0.0150161" pos="-7.55164e-07 -0.0226812 0.000701356" quat="0.72194 -0.691956 -2.61277e-07 0" type="capsule" group="3" friction="0.3" density="0" rgba="0.8 0.3 0.3 0.4"/>
+          <body name="r_larm_joint" pos="0.0088013 -0.060007 0">
+            <inertial pos="-0.008596 -0.015762 0.00215" quat="0.27614 0.424006 0.56964 0.64767" mass="0.0124" diaginertia="1.6521e-05 1.6521e-05 1.6521e-05"/>
+            <joint name="r_ely_joint" pos="0 0 0" axis="0 1 0" range="-2.24604 2.34441"/>
+            <geom class="visual" mesh="r_larm_joint"/>
+            <body name="r_larm" pos="0 -0.024054 0">
+              <inertial pos="-0.008596 -0.027572 0.00042" quat="0.499649 0.50035 -0.50035 0.499649" mass="0.0812" diaginertia="4.14117e-05 3.42361e-05 1.41587e-05"/>
+              <joint name="r_elx_joint" pos="0 0 0" axis="1 0 0" range="-0.23562 2.0764"/>
+              <geom class="visual" mesh="r_larm"/>
+              <geom name="r_larm_col" size="0.0238175 0.0124882" pos="-0.00859646 -0.0247955 0.00034211" quat="0.713664 -0.700488 -2.54165e-07 0" type="capsule" group="3" friction="0.3" density="0" rgba="0.8 0.3 0.3 0.4"/>
+              <body name="r_hand" pos="0 -0.061348 0">
+                <inertial pos="0.001817 -0.018911 0.002717" quat="0.606198 0.457528 -0.381283 0.527082" mass="0.0046" diaginertia="9.72897e-07 8.1592e-07 2.49939e-07"/>
+                <joint name="r_wry_joint" pos="0 0 0" axis="0 1 0" range="-2.35619 2.06167"/>
+                <geom class="visual" mesh="r_hand"/>
+                <geom name="r_hand_col" size="0.0107532 0.0133963" pos="0.00182309 -0.0225704 0.00373988" quat="0.601804 -0.797745 -0.0378874 0" type="capsule" group="3" friction="0.3" density="0" rgba="0.8 0.3 0.3 0.4"/>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="l_uarm_joint" pos="0 0.0359 0.113043">
+        <inertial pos="0 0.005109 0.000865" quat="-0.0834205 0.702169 -0.0834205 0.702169" mass="0.0131" diaginertia="1.33218e-05 1.15463e-05 3.90903e-06"/>
+        <joint name="l_shy_joint" pos="0 0 0" axis="0 1 0" range="-1.88496 2.23838"/>
+        <geom class="visual" mesh="l_uarm_joint"/>
+        <body name="l_uarm" pos="0 0.0189 0">
+          <inertial pos="-1e-06 0.02164 0.00067" quat="0.504175 0.49579 -0.49579 0.504175" mass="0.0712" diaginertia="4.14081e-05 3.56621e-05 1.26809e-05"/>
+          <joint name="l_shx_joint" pos="0 0 0" axis="1 0 0" range="-1.59809 0.05301"/>
+          <geom class="visual" mesh="l_uarm"/>
+          <geom name="l_uarm_col" size="0.0225062 0.0150161" pos="-7.57179e-07 0.0226854 0.000701354" quat="0.72194 0.691956 -1.98891e-07 0" type="capsule" group="3" friction="0.3" density="0" rgba="0.8 0.3 0.3 0.4"/>
+          <body name="l_larm_joint" pos="0.0088013 0.060007 0">
+            <inertial pos="-0.008596 0.015762 0.00215" quat="0.64767 0.56964 0.424006 0.27614" mass="0.0124" diaginertia="1.6521e-05 1.6521e-05 1.6521e-05"/>
+            <joint name="l_ely_joint" pos="0 0 0" axis="0 1 0" range="-2.24604 2.34441"/>
+            <geom class="visual" mesh="l_larm_joint"/>
+            <body name="l_larm" pos="0 0.024054 0">
+              <inertial pos="-0.008596 0.027572 0.00042" quat="0.50035 0.499649 -0.499649 0.50035" mass="0.0812" diaginertia="4.14117e-05 3.42361e-05 1.41587e-05"/>
+              <joint name="l_elx_joint" pos="0 0 0" axis="1 0 0" range="-2.0764 0.23562"/>
+              <geom class="visual" mesh="l_larm"/>
+              <geom name="l_larm_col" size="0.0238175 0.0124882" pos="-0.00859647 0.0247999 0.000342107" quat="0.713664 0.700488 -1.91602e-07 0" type="capsule" group="3" friction="0.3" density="0" rgba="0.8 0.3 0.3 0.4"/>
+              <body name="l_hand" pos="0 0.061348 0">
+                <inertial pos="0.001817 0.018911 0.002717" quat="0.457528 0.606198 -0.527082 0.381283" mass="0.0046" diaginertia="9.72897e-07 8.1592e-07 2.49939e-07"/>
+                <joint name="l_wry_joint" pos="0 0 0" axis="0 1 0" range="-2.35619 2.06167"/>
+                <geom class="visual" mesh="l_hand"/>
+                <geom name="l_hand_col" size="0.0107532 0.0133963" pos="0.00182309 0.0225748 0.00373987" quat="0.601804 0.797745 -0.0378873 0" type="capsule" group="3" friction="0.3" density="0" rgba="0.8 0.3 0.3 0.4"/>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="neck_pitch" pos="0.0038738 0 0.132809">
+        <inertial pos="-0.006449 2e-06 0.008964" quat="0.706518 0.706518 0.0288548 -0.0288548" mass="0.01" diaginertia="6.49173e-07 6.19585e-07 2.2963e-07"/>
+        <joint name="head_ny_joint" pos="0 0 0" axis="0 1 0" range="-0.17671 0.41233"/>
+        <geom class="visual" mesh="neck_pitch"/>
+        <body name="head_yaw" pos="-0.0103485 0 0.011103">
+          <inertial pos="0.0081 2e-06 0.017871" quat="0.5 0.5 0.5 0.5" mass="0.01" diaginertia="2.36892e-06 1.73729e-06 1.26361e-06"/>
+          <joint name="head_nz_joint" pos="0 0 0" axis="0 0 1" range="-0.82467 0.82467"/>
+          <geom class="visual" mesh="neck_yaw"/>
+          <body name="head" pos="0 0 0.0129">
+            <inertial pos="0.014213 1e-06 0.011813" quat="0.967933 -1.82525e-06 -0.251209 -3.26839e-06" mass="0.1449" diaginertia="6.77704e-05 5.98414e-05 5.60737e-05"/>
+            <joint name="head_nx_joint" pos="0 0 0" axis="1 0 0" range="-0.38288 0.50069"/>
+            <geom class="visual" mesh="head"/>
+            <geom name="head_col" size="0.0382346 0.0438966 0.0341065" pos="0.0127773 2.47054e-06 0.024683" type="box" group="3" friction="0.3" density="0" rgba="0.8 0.3 0.3 0.4"/>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+
+  <contact>
+    <exclude body1="base_link" body2="r_uleg"/>
+    <exclude body1="base_link" body2="l_uleg"/>
+    <exclude body1="base_link" body2="r_uarm"/>
+    <exclude body1="base_link" body2="l_uarm"/>
+    <exclude body1="base_link" body2="head"/>
+    <exclude body1="r_uleg" body2="r_ankle"/>
+    <exclude body1="r_uleg" body2="r_foot"/>
+    <exclude body1="r_lleg" body2="r_foot"/>
+    <exclude body1="l_uleg" body2="l_ankle"/>
+    <exclude body1="l_uleg" body2="l_foot"/>
+    <exclude body1="l_lleg" body2="l_foot"/>
+    <exclude body1="r_uarm" body2="r_larm"/>
+    <exclude body1="l_uarm" body2="l_larm"/>
+  </contact>
+</mujoco>
