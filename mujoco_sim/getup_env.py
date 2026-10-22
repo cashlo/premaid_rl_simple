@@ -59,6 +59,17 @@ class GetUpCfg(WalkCfg):
     w_saturation: float = -0.2  # fraction of servos at their torque limit
     w_joint_limit: float = -2.0
 
+    # success = the hand-over state for the walking policy, checked with what the real robot can
+    # sense (tilt, gyro, leg joint angles) plus both feet down; held for success_hold_s, then the
+    # episode ends with the standing reward for the rest of the episode as a bonus.
+    # (Balancing is left to the walker: with big get-up actions the policy can reach a crouch
+    # but kept sitting back down instead of holding it.)
+    success_upright: float = 0.9
+    success_leg_err: float = 0.8  # rad, norm over the 12 leg joints vs the crouch (walker recovers from deeper)
+    success_gyro: float = 1.0  # rad/s
+    success_hold_s: float = 0.2
+    success_rate: float = 12.0  # bonus per remaining second (= full standing reward rate)
+
 
 class PremaidGetUpEnv(PremaidWalkEnv):
     cfg: GetUpCfg
@@ -190,6 +201,8 @@ class PremaidGetUpEnv(PremaidWalkEnv):
         self.commands[:] = 0.0
         self.ep_sums = {}
         self.stood_at = None
+        self.success_at = None
+        self.handover_steps = 0
         return self._observe()
 
     def _sample_commands(self):
@@ -240,14 +253,30 @@ class PremaidGetUpEnv(PremaidWalkEnv):
         if standing and self.stood_at is None:
             self.stood_at = self.step_count * dt
         self._standing_now = standing
-        return float(sum(t.values())), t, False
+
+        leg = self.leg_idx
+        handover = (
+            upright > c.success_upright
+            and np.linalg.norm(q[leg] - self.default_q[leg]) < c.success_leg_err
+            and np.linalg.norm(gyro) < c.success_gyro
+            and contact.all()
+        )
+        self.handover_steps = self.handover_steps + 1 if handover else 0
+        success = self.handover_steps * dt >= c.success_hold_s
+        if success:
+            self.success_at = self.step_count * dt
+            t["success"] = c.success_rate * max(0.0, c.episode_length_s - self.success_at)
+        else:
+            t["success"] = 0.0
+        return float(sum(t.values())), t, success
 
     def episode_summary(self):
         out = super().episode_summary()
         out.pop("Curriculum/debris_level", None)
         kind = "from_squat" if getattr(self, "squat_start", False) else "from_lying"
-        out[f"GetUp/standing_at_end_{kind}"] = float(getattr(self, "_standing_now", False))
-        out[f"GetUp/time_to_stand_s_{kind}"] = self.stood_at if self.stood_at is not None else self.cfg.episode_length_s
+        ok = getattr(self, "success_at", None) is not None
+        out[f"GetUp/success_{kind}"] = float(ok)
+        out[f"GetUp/time_to_success_s_{kind}"] = self.success_at if ok else self.cfg.episode_length_s
         return out
 
 

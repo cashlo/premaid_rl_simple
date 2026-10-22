@@ -324,6 +324,11 @@ def mode_run(args):
 
 
 def mode_getup(args):
+    global GETUP_CFG, LEG_IDX
+    from getup_env import GetUpCfg
+
+    GETUP_CFG = GetUpCfg()
+    LEG_IDX = np.array([SERVO_ORDER.index(n) for n in LEG_JOINTS])
     if not args.getup_checkpoint:
         raise SystemExit("--getup_checkpoint is required for --mode getup")
     up = Policy(args.getup_checkpoint, task="getup")
@@ -346,13 +351,15 @@ def mode_getup(args):
             s = robot.read()
             if phase == "getup":
                 robot.write(up.act(up.observe(s, zero)))
-                tilt = np.linalg.norm(s["grav"][:2])
-                pose_err = np.linalg.norm(s["q"] - up.default_q)
-                ok = tilt < 0.3 and np.linalg.norm(s["gyro"]) < 0.6 and pose_err < 0.35
+                # same hand-over test as GetUpCfg.success_* (minus foot contact, which we can't sense)
+                g = GETUP_CFG
+                upright = -s["grav"][2]
+                leg_err = np.linalg.norm((s["q"] - up.default_q)[LEG_IDX])
+                ok = upright > g.success_upright and leg_err < g.success_leg_err and np.linalg.norm(s["gyro"]) < g.success_gyro
                 settled = settled + 1 if ok else 0
-                if settled >= int(0.5 / CTRL_DT):
+                if settled >= int(round(g.success_hold_s / CTRL_DT)):
                     t_up = step * CTRL_DT
-                    print(f"upright and settled after {t_up:.1f} s -> " + ("walking policy (standing)" if walk else "holding crouch"))
+                    print(f"reached the crouch after {t_up:.1f} s -> " + ("walking policy (standing)" if walk else "holding crouch"))
                     phase = "walk" if walk else "hold"
                     if walk:
                         walk.reset()
