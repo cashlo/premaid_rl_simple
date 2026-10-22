@@ -30,7 +30,7 @@ set /a WORKERS=%NUMBER_OF_PROCESSORS%-2
 if %WORKERS% LSS 1 set WORKERS=1
 set /a NENVS=%WORKERS%*32
 set RESUME=
-if exist runs\premaid_getup\*  for /r runs\premaid_getup %%f in (*.pt) do set RESUME=--resume latest
+if exist runs\premaid_getup_v2\*  for /r runs\premaid_getup_v2 %%f in (*.pt) do set RESUME=--resume latest
 echo %NENVS% robots on %WORKERS% worker processes %RESUME%
 echo TensorBoard: open another prompt, activate premaid_mujoco, run  tensorboard --logdir "%CD%\runs"
 python train_mujoco.py --task getup --num_envs %NENVS% --workers %WORKERS% --timesteps 300000 %RESUME% %*
