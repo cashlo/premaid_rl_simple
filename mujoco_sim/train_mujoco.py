@@ -48,6 +48,10 @@ class Policy(GaussianMixin, Model):
         GaussianMixin.__init__(self, clip_actions=False, clip_log_std=True, min_log_std=-5.0, max_log_std=1.0)
         self.net = mlp(self.num_observations, self.num_actions)
         self.log_std_parameter = nn.Parameter(torch.full((self.num_actions,), log_std_init))
+        # start with ~zero actions (= hold the default pose) instead of random offsets of ~0.15
+        with torch.no_grad():
+            self.net[-1].weight.mul_(0.01)
+            self.net[-1].bias.zero_()
 
     def compute(self, inputs, role=""):
         return self.net(inputs["observations"]), {"log_std": self.log_std_parameter}
@@ -65,7 +69,7 @@ class Value(DeterministicMixin, Model):
         return self.net(inputs["states"]), {}
 
 
-def make_agent(env, device, rollouts=24, run_dir=RUN_DIR, log_std_init=-1.0):
+def make_agent(env, device, rollouts=24, run_dir=RUN_DIR, log_std_init=-1.0, learning_rate=1e-3):
     models = {
         "policy": Policy(env.observation_space, env.action_space, device, log_std_init),
         "value": Value(env.state_space, device),
@@ -76,7 +80,7 @@ def make_agent(env, device, rollouts=24, run_dir=RUN_DIR, log_std_init=-1.0):
         mini_batches=4,
         discount_factor=0.99,
         gae_lambda=0.95,
-        learning_rate=1e-3,
+        learning_rate=learning_rate,
         learning_rate_scheduler=KLAdaptiveLR,
         learning_rate_scheduler_kwargs={"kl_threshold": 0.01},
         observation_preprocessor=RunningStandardScaler,
@@ -137,7 +141,8 @@ def main():
     print(f"[INFO] task: {args.task}")
     # get-up actions span 1 rad (walking 0.2-0.3), so start with less exploration noise
     agent = make_agent(env, args.device, args.rollouts, run_dir=task["run_dir"],
-                       log_std_init=-2.3 if args.task == "getup" else -1.0)
+                       log_std_init=-2.3 if args.task == "getup" else -1.0,
+                       learning_rate=3e-4 if args.task == "getup" else 1e-3)
     if args.resume:
         path = find_checkpoint(args.resume, task["run_dir"])
         print(f"[INFO] resuming from {path}")
