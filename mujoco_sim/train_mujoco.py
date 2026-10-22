@@ -43,11 +43,11 @@ def mlp(n_in, n_out, hidden=(512, 256, 128)):
 class Policy(GaussianMixin, Model):
     """Actor: sees only what the real robot can sense (observations)."""
 
-    def __init__(self, observation_space, action_space, device):
+    def __init__(self, observation_space, action_space, device, log_std_init=-1.0):
         Model.__init__(self, observation_space=observation_space, action_space=action_space, device=device)
         GaussianMixin.__init__(self, clip_actions=False, clip_log_std=True, min_log_std=-5.0, max_log_std=1.0)
         self.net = mlp(self.num_observations, self.num_actions)
-        self.log_std_parameter = nn.Parameter(torch.full((self.num_actions,), -1.0))
+        self.log_std_parameter = nn.Parameter(torch.full((self.num_actions,), log_std_init))
 
     def compute(self, inputs, role=""):
         return self.net(inputs["observations"]), {"log_std": self.log_std_parameter}
@@ -65,9 +65,9 @@ class Value(DeterministicMixin, Model):
         return self.net(inputs["states"]), {}
 
 
-def make_agent(env, device, rollouts=24, run_dir=RUN_DIR):
+def make_agent(env, device, rollouts=24, run_dir=RUN_DIR, log_std_init=-1.0):
     models = {
-        "policy": Policy(env.observation_space, env.action_space, device),
+        "policy": Policy(env.observation_space, env.action_space, device, log_std_init),
         "value": Value(env.state_space, device),
     }
     cfg = PPO_CFG(
@@ -135,7 +135,9 @@ def main():
     print(f"[INFO] {env.num_envs} robots on {len(vec.procs)} CPU workers, learner on {args.device}{gpu}")
 
     print(f"[INFO] task: {args.task}")
-    agent = make_agent(env, args.device, args.rollouts, run_dir=task["run_dir"])
+    # get-up actions span 1 rad (walking 0.2-0.3), so start with less exploration noise
+    agent = make_agent(env, args.device, args.rollouts, run_dir=task["run_dir"],
+                       log_std_init=-1.5 if args.task == "getup" else -1.0)
     if args.resume:
         path = find_checkpoint(args.resume, task["run_dir"])
         print(f"[INFO] resuming from {path}")

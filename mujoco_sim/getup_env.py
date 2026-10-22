@@ -38,8 +38,12 @@ class GetUpCfg(WalkCfg):
     pool_prone_frac: float = 0.4  # face down; the rest face up or on a side
     # reverse curriculum: some episodes start from a squat (hands free, feet flat) so the last
     # phase, squat -> stand, is learned first; otherwise sitting on the floor is a dead end
-    squat_frac: float = 0.3
+    squat_frac: float = 0.25
     squat_pool_size: int = 32
+    # more stepping stones: sitting (legs out front) and kneeling starts, where earlier runs got stuck
+    sit_frac: float = 0.15
+    kneel_frac: float = 0.15
+    mid_pool_size: int = 32
     init_noise: float = 0.05  # rad added to pool joint angles
 
     # rewards (x dt)
@@ -95,6 +99,8 @@ class PremaidGetUpEnv(PremaidWalkEnv):
         self.stand_head_z = float(self.data.xpos[self.head_id][2])
         self._pool = self._make_pool()
         self._squat_pool = self._make_squat_pool()
+        self._sit_pool = self._make_mid_pool("sit")
+        self._kneel_pool = self._make_mid_pool("kneel")
         self.reset()
 
     # ------------------------------------------------------------------ lying poses
@@ -169,6 +175,50 @@ class PremaidGetUpEnv(PremaidWalkEnv):
             pool.append((d.qpos.copy(), d.qvel.copy()))
         return pool
 
+    def _make_mid_pool(self, kind):
+        """Sitting or kneeling poses: set the joints, drop from just above the floor with the servos
+        holding, settle 1 s. Whatever it settles into (even toppled) is a valid start."""
+        c, m, r = self.cfg, self.model, self.rng
+        from premaid_env import SERVO_ORDER
+
+        idx = {n: SERVO_ORDER.index(n) for n in SERVO_ORDER}
+        d = mujoco.MjData(m)
+        pool = []
+        for _ in range(c.mid_pool_size):
+            mujoco.mj_resetData(m, d)
+            q = self.default_q.copy()
+            lean_back = r.random() < 0.5
+            for s in "lr":
+                if kind == "sit":  # thighs forward, legs out; propped on hands behind, or leaning forward
+                    q[idx[f"{s}_hpy"]] = r.uniform(-1.6, -1.1)
+                    q[idx[f"{s}_kny"]] = r.uniform(0.0, 1.0)
+                    q[idx[f"{s}_aky"]] = r.uniform(-0.5, 0.2)
+                    q[idx[f"{s}_shy"]] = r.uniform(0.6, 1.1) if lean_back else r.uniform(-1.2, -0.6)
+                    q[idx[f"{s}_ely"]] = r.uniform(-0.2, 0.2)
+                else:  # kneel: thighs down, shins on the floor
+                    q[idx[f"{s}_hpy"]] = r.uniform(-0.5, 0.0)
+                    q[idx[f"{s}_kny"]] = r.uniform(1.8, 2.05)
+                    q[idx[f"{s}_aky"]] = r.uniform(-0.2, 0.4)
+                    q[idx[f"{s}_shy"]] = r.uniform(-1.4, 0.0)
+                q[idx[f"{s}_hpx"]] += r.normal(0, 0.08)
+            q = np.clip(q, self.jnt_lo, self.jnt_hi)
+            d.qpos[self.qadr] = q
+            pitch = (r.uniform(-0.45, -0.2) if lean_back else r.uniform(0.2, 0.5)) if kind == "sit" else r.uniform(-0.1, 0.25)
+            d.qpos[3:7] = _euler_to_quat(0.0, pitch, r.uniform(-np.pi, np.pi))
+            # lower until the first contact with the floor
+            d.qpos[2] = 0.35
+            while d.qpos[2] > 0.0:
+                mujoco.mj_forward(m, d)
+                if any(self.floor_id in (con.geom1, con.geom2) for con in d.contact[: d.ncon]):
+                    break
+                d.qpos[2] -= 0.002
+            d.qpos[2] += 0.002
+            d.ctrl[:] = q
+            for _ in range(int(1.0 / m.opt.timestep)):
+                mujoco.mj_step(m, d)
+            pool.append((d.qpos.copy(), d.qvel.copy() * 0.0))
+        return pool
+
     # ------------------------------------------------------------------ API
     def reset(self):
         if self._pool is None:  # called from the base constructor before the pool exists
@@ -178,8 +228,16 @@ class PremaidGetUpEnv(PremaidWalkEnv):
         if not hasattr(self, "friction"):
             self.friction = float(m.geom_friction[self.floor_id, 0])
         mujoco.mj_resetData(m, d)
-        self.squat_start = bool(r.random() < c.squat_frac)
-        pool = self._squat_pool if self.squat_start else self._pool
+        u = r.random()
+        if u < c.squat_frac:
+            self.start_kind, pool = "squat", self._squat_pool
+        elif u < c.squat_frac + c.sit_frac:
+            self.start_kind, pool = "sit", self._sit_pool
+        elif u < c.squat_frac + c.sit_frac + c.kneel_frac:
+            self.start_kind, pool = "kneel", self._kneel_pool
+        else:
+            self.start_kind, pool = "lying", self._pool
+        self.squat_start = self.start_kind == "squat"
         qpos, qvel = pool[r.integers(len(pool))]
         d.qpos[:] = qpos
         d.qvel[:] = qvel
@@ -273,7 +331,7 @@ class PremaidGetUpEnv(PremaidWalkEnv):
     def episode_summary(self):
         out = super().episode_summary()
         out.pop("Curriculum/debris_level", None)
-        kind = "from_squat" if getattr(self, "squat_start", False) else "from_lying"
+        kind = "from_" + getattr(self, "start_kind", "lying")
         ok = getattr(self, "success_at", None) is not None
         out[f"GetUp/success_{kind}"] = float(ok)
         out[f"GetUp/time_to_success_s_{kind}"] = self.success_at if ok else self.cfg.episode_length_s
