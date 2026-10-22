@@ -137,7 +137,7 @@ def main():
     print(f"[INFO] task: {args.task}")
     # get-up actions span 1 rad (walking 0.2-0.3), so start with less exploration noise
     agent = make_agent(env, args.device, args.rollouts, run_dir=task["run_dir"],
-                       log_std_init=-1.5 if args.task == "getup" else -1.0)
+                       log_std_init=-2.3 if args.task == "getup" else -1.0)
     if args.resume:
         path = find_checkpoint(args.resume, task["run_dir"])
         print(f"[INFO] resuming from {path}")

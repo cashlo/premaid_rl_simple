@@ -70,13 +70,15 @@ class Policy:
         self.default_q = np.array([DEFAULT_POSE.get(n, 0.0) for n in SERVO_ORDER])
         self.scale = np.array([cfg.action_scale_leg if n in LEG_JOINTS else cfg.action_scale_upper for n in SERVO_ORDER])
         self.clip = cfg.action_clip
+        self.alpha = getattr(cfg, "action_filter_alpha", 1.0)  # get-up filters its actions (see GetUpCfg)
         m = mujoco.MjModel.from_xml_path(ASSET_XML)
         self.lo = np.array([m.actuator(n).ctrlrange[0] for n in SERVO_ORDER])
         self.hi = np.array([m.actuator(n).ctrlrange[1] for n in SERVO_ORDER])
         self.reset()
 
-    def reset(self):
-        self.last_action = np.zeros(25)
+    def reset(self, q=None):
+        # the filter starts at the current pose, like GetUpEnv.reset
+        self.last_action = np.zeros(25) if q is None else np.clip((q - self.default_q) / self.scale, -self.clip, self.clip)
         self.q_hist = collections.deque(maxlen=3)
         self.steps = 0
 
@@ -102,6 +104,7 @@ class Policy:
         with self.torch.no_grad():
             a = self.net(self.torch.as_tensor(obs)[None])[0].numpy().astype(np.float64)
         a = np.clip(a, -self.clip, self.clip)
+        a = self.alpha * a + (1.0 - self.alpha) * self.last_action
         self.last_action = a
         self.steps += 1
         return np.clip(self.default_q + self.scale * a, self.lo, self.hi)
@@ -346,7 +349,8 @@ def mode_getup(args):
         if s["grav"] is None:
             raise RuntimeError("no IMU data -- check --imu port")
         robot.write(s["q"])  # torque on, holding the current pose
-        up.reset()
+        up.reset(s["q"])
+        gyro_ema = np.zeros(3)
         for step in range(int(args.seconds / CTRL_DT)):
             s = robot.read()
             if phase == "getup":
@@ -355,7 +359,8 @@ def mode_getup(args):
                 g = GETUP_CFG
                 upright = -s["grav"][2]
                 leg_err = np.linalg.norm((s["q"] - up.default_q)[LEG_IDX])
-                ok = upright > g.success_upright and leg_err < g.success_leg_err and np.linalg.norm(s["gyro"]) < g.success_gyro
+                gyro_ema = g.success_gyro_alpha * s["gyro"] + (1 - g.success_gyro_alpha) * gyro_ema
+                ok = upright > g.success_upright and leg_err < g.success_leg_err and np.linalg.norm(gyro_ema) < g.success_gyro
                 settled = settled + 1 if ok else 0
                 if settled >= int(round(g.success_hold_s / CTRL_DT)):
                     t_up = step * CTRL_DT
@@ -367,7 +372,8 @@ def mode_getup(args):
                 if np.linalg.norm(s["grav"][:2]) > FALL_TILT:
                     print("fell again -> back to get-up")
                     phase, settled = "getup", 0
-                    up.reset()
+                    up.reset(s["q"])
+                    gyro_ema = np.zeros(3)
                     continue
                 robot.write(walk.act(walk.observe(s, zero)))
             else:

@@ -70,7 +70,13 @@ class GetUpCfg(WalkCfg):
     # but kept sitting back down instead of holding it.)
     success_upright: float = 0.9
     success_leg_err: float = 0.8  # rad, norm over the 12 leg joints vs the crouch (walker recovers from deeper)
-    success_gyro: float = 1.0  # rad/s
+    success_gyro: float = 0.6  # rad/s, on the smoothed gyro (EMA, success_gyro_alpha): jitter averages out, tipping doesn't
+    success_gyro_alpha: float = 0.15
+    success_hip_frac: float = 0.8  # sim-only check: hips at >= 80% of standing height (instead of foot contact)
+    # low-pass filter on actions: a_f = alpha * a + (1 - alpha) * a_f_prev. Stiff servos on a 1.8 kg
+    # robot turn even 0.03 rad of per-step jitter into hopping; the filter keeps exploration (and the
+    # real servos) smooth. deploy_policy.py applies the same filter.
+    action_filter_alpha: float = 0.3
     success_hold_s: float = 0.2
     success_rate: float = 12.0  # bonus per remaining second (= full standing reward rate)
 
@@ -252,6 +258,7 @@ class PremaidGetUpEnv(PremaidWalkEnv):
 
         self.step_count = 0
         self.last_action = np.clip((d.qpos[self.qadr] - self.default_q) / self.action_scale, -c.action_clip, c.action_clip)
+        self.action_filt = self.last_action.copy()  # filter starts at the current pose
         self.last_dq = np.zeros(NUM_ACTIONS)
         self.foot_pos_prev = d.site_xpos[self.foot_site_ids].copy()
         self.next_push = 1e9
@@ -261,10 +268,17 @@ class PremaidGetUpEnv(PremaidWalkEnv):
         self.stood_at = None
         self.success_at = None
         self.handover_steps = 0
+        self.gyro_ema = np.zeros(3)
         return self._observe()
 
     def _sample_commands(self):
         self.commands[:] = 0.0
+
+    def step(self, action):
+        a = np.clip(np.asarray(action, dtype=np.float64), -self.cfg.action_clip, self.cfg.action_clip)
+        alpha = self.cfg.action_filter_alpha
+        self.action_filt = alpha * a + (1.0 - alpha) * self.action_filt
+        return super().step(self.action_filt)
 
     def _observe(self):
         self.commands[:] = 0.0  # get-up never takes commands (keeps viewer key presses out of the obs)
@@ -313,11 +327,12 @@ class PremaidGetUpEnv(PremaidWalkEnv):
         self._standing_now = standing
 
         leg = self.leg_idx
+        self.gyro_ema = c.success_gyro_alpha * gyro + (1 - c.success_gyro_alpha) * self.gyro_ema
         handover = (
             upright > c.success_upright
             and np.linalg.norm(q[leg] - self.default_q[leg]) < c.success_leg_err
-            and np.linalg.norm(gyro) < c.success_gyro
-            and contact.all()
+            and np.linalg.norm(self.gyro_ema) < c.success_gyro
+            and height > c.success_hip_frac
         )
         self.handover_steps = self.handover_steps + 1 if handover else 0
         success = self.handover_steps * dt >= c.success_hold_s
